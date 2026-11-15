@@ -178,6 +178,7 @@ def pre_commit() -> list[str]:
 
 
 def main(argv: Sequence[str]) -> int:
+    problems: list[str] = []
     try:
         match list(argv):
             case ["pre-commit"]:

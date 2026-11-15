@@ -5,6 +5,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from synthetic_data import write_group_schedule
+from wc2026bet import ocr
 from wc2026bet.ocr import (
     BoundingBox,
     detect_odds_boxes,
@@ -88,6 +89,30 @@ def test_match_row_text_to_match_accepts_alternative_team_spellings(tmp_path: Pa
 
     assert (result.match.team_home, result.match.team_away) == (schedule_name, "Team X")
     assert result.reversed_order is False
+
+
+def test_resolve_image_row_matches_falls_back_to_the_broad_crop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_data = write_group_schedule(tmp_path / "base-data", [("Team Y", "Team X"), ("Team W", "Team V")])
+    texts = {(1, False): "Team Y ; @ Team X", (2, False): "Tea", (2, True): "Team W ; @ Team V"}
+    rows = [[BoundingBox(0, 0, 1, 1)], [BoundingBox(0, 1, 1, 1)]]
+    monkeypatch.setattr(ocr, "_ocr_row_text", lambda _image, row, *, broad: texts[(row[0].top + 1, broad)])
+
+    row_texts, row_matches = ocr.resolve_image_row_matches(Image.new("L", (1, 2)), rows, base_data)
+
+    assert row_texts == ["Team Y ; @ Team X", "Team W ; @ Team V"]
+    assert [(m.match.team_home, m.match.team_away) for m in row_matches] == [("Team Y", "Team X"), ("Team W", "Team V")]
+
+
+def test_resolve_image_row_matches_reports_the_row_when_both_crops_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_data = write_group_schedule(tmp_path / "base-data", [("Team Y", "Team X")])
+    monkeypatch.setattr(ocr, "_ocr_row_text", lambda _image, _row, *, broad: "Tea")
+
+    with pytest.raises(ValueError, match="^row 1: "):
+        ocr.resolve_image_row_matches(Image.new("L", (1, 1)), [[BoundingBox(0, 0, 1, 1)]], base_data)
 
 
 @pytest.mark.real_data
