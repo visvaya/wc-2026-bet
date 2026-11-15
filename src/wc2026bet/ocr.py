@@ -291,21 +291,17 @@ def resolve_image_row_matches(
     row_texts: list[str] = []
     row_matches: list[MatchRowResolution] = []
     for row_index, row in enumerate(row_boxes, start=1):
-        tight_text = _ocr_row_text(image, row, broad=False)
+        text = _ocr_row_text(image, row, broad=False)
         try:
-            resolution = match_row_text_to_match(tight_text, base_data)
-            row_texts.append(tight_text)
-            row_matches.append(resolution)
-            continue
+            resolution = match_row_text_to_match(text, base_data)
         except ValueError:
-            pass
-
-        broad_text = _ocr_row_text(image, row, broad=True)
-        try:
-            resolution = match_row_text_to_match(broad_text, base_data)
-        except ValueError as exc:
-            raise ValueError(f"row {row_index}: {exc}") from exc
-        row_texts.append(broad_text)
+            # The tight crop can cut team names; retry on the broad crop and report its error.
+            text = _ocr_row_text(image, row, broad=True)
+            try:
+                resolution = match_row_text_to_match(text, base_data)
+            except ValueError as exc:
+                raise ValueError(f"row {row_index}: {exc}") from exc
+        row_texts.append(text)
         row_matches.append(resolution)
 
     seen: dict[int, int] = {}
