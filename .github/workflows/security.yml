@@ -1,0 +1,79 @@
+name: Security
+
+# Dependency and workflow audits in one job: GitHub bills each job rounded up to
+# a full minute and every scan here takes seconds. Every step runs even when an
+# earlier one fails, so one run shows all findings. Pull requests run it only when
+# dependencies or workflows change; code-only changes are audited after the merge
+# and weekly. The secret scan runs on every pull request in the CI job instead.
+# Because of the path filter, this check must never be a required status check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - .github/**
+  schedule:
+    - cron: "0 5 * * 1" # Monday 05:00 UTC: new advisories surface without code changes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    name: Security checks (pip-audit, zizmor, actionlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Downloaded binaries are pinned by hand with checksums from each release's
+    # checksums file: Dependabot does not bump tools fetched in run steps.
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      PIP_AUDIT_VERSION: 2.10.1
+      ZIZMOR_VERSION: 1.30.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.21"
+
+      # Audits the exact locked versions with their hashes, not a fresh resolve.
+      - name: Dependency audit, production (pip-audit)
+        if: ${{ !cancelled() }}
+        run: |
+          uv export --locked --no-dev --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/prod.txt"
+          uvx "pip-audit==${PIP_AUDIT_VERSION}" --strict --require-hashes --disable-pip -r "$RUNNER_TEMP/prod.txt"
+
+      # Development tools never ship, so a finding here warns instead of failing;
+      # it is still fixed in the next change to the repository.
+      - name: Dependency audit, development (pip-audit)
+        if: ${{ !cancelled() }}
+        run: |
+          uv export --locked --all-extras --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/all.txt"
+          uvx "pip-audit==${PIP_AUDIT_VERSION}" --strict --require-hashes --disable-pip -r "$RUNNER_TEMP/all.txt" \
+            || echo "::warning::pip-audit found vulnerable development dependencies; fix them in the next change."
+
+      # zizmor checks workflow security; actionlint below checks correctness
+      # (expressions, inputs, ShellCheck on run scripts). They complement each other.
+      - name: Workflow audit (zizmor)
+        if: ${{ !cancelled() }}
+        run: uvx "zizmor==${ZIZMOR_VERSION}" --offline --persona pedantic .github/workflows
+
+      - name: Workflow lint (actionlint)
+        if: ${{ !cancelled() }}
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color

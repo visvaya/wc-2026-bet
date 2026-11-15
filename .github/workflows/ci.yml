@@ -1,0 +1,109 @@
+name: CI
+
+# One job for everything that has to pass on every pull request: GitHub bills
+# each job rounded up to a full minute, so the PR title check and the secret
+# scan run as steps here instead of as separate jobs. The dependency and
+# workflow audits live in security.yml, which runs on pull requests only when
+# dependencies or workflows change.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1" # Monday 05:00 UTC: weekly secret scan (and the gate) without code changes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read # the PR title is read live, so a rerun sees a fixed title
+    # Downloaded binaries are pinned by hand with checksums from each release's
+    # checksums file: Dependabot does not bump tools fetched in run steps.
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the whole history, for the secret scan and the PR scope
+          persist-credentials: false
+
+      # Pull requests that change only documentation skip the gate below; main
+      # always runs it after the merge. An empty file list counts as code.
+      - name: Scope
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          if grep -qvE '^docs/|^[^/]+\.md$' <<< "$changed"; then
+            echo "docs_only=false"
+          else
+            echo "docs_only=true"
+          fi >> "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        if: steps.scope.outputs.docs_only != 'true'
+        with:
+          version: "0.12.21"
+          # The Python version comes from .python-version, shared with local development.
+          activate-environment: true
+          enable-cache: true
+
+      # Frozen install from the committed lockfile; fails if uv.lock is out of date.
+      - name: Install
+        if: steps.scope.outputs.docs_only != 'true'
+        run: uv sync --locked --extra dev
+
+      - name: Lint
+        if: steps.scope.outputs.docs_only != 'true'
+        run: ruff check .
+
+      - name: Format
+        if: steps.scope.outputs.docs_only != 'true'
+        run: ruff format --check .
+
+      - name: Typecheck
+        if: steps.scope.outputs.docs_only != 'true'
+        run: mypy
+
+      # Coverage threshold: `fail_under` in pyproject.toml.
+      - name: Test
+        if: steps.scope.outputs.docs_only != 'true'
+        run: python -m pytest --cov
+
+      - name: Install gitleaks
+        if: ${{ !cancelled() }}
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+
+      # Also runs on pull requests from forks, which platform push protection does not cover.
+      - name: Secret scan (gitleaks, full history)
+        if: ${{ !cancelled() }}
+        run: '"$RUNNER_TEMP/gitleaks" git . --redact --no-banner'
+
+      - name: PR title
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          title="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .title)"
+          .github/scripts/check-pr-title.sh "$title"

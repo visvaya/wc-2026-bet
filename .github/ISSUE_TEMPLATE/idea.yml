@@ -1,0 +1,11 @@
+name: Idea
+description: A suggestion for the model, the pipeline or the reports.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What you would change and what it would improve.
+    validations:
+      required: true

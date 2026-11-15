@@ -1,0 +1,4 @@
+#!/bin/sh
+# Identity, forbidden characters and ruff on the staged files.
+# The checks live in scripts/git_hooks.py; enable with: git config core.hooksPath .githooks
+exec uv run --locked --extra dev python scripts/git_hooks.py pre-commit

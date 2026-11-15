@@ -1,0 +1,27 @@
+name: Bug
+description: The pipeline, a command or a report does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The command you ran, its arguments and the relevant output or traceback. Do not attach third-party data files.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The commit you ran (`git rev-parse --short HEAD`).
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and Python version

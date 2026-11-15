@@ -1,0 +1,38 @@
+name: PR title
+
+# Squash merges use the PR title as the commit on main, so the title must be a
+# Conventional Commit. The CI job checks it on every push to a pull request;
+# this workflow only reacts to a renamed pull request, because the full gate
+# should not rerun on edits. After fixing a title, rerun the failed CI job
+# (`gh run rerun --failed`): it reads the title live. Never a required check:
+# body-only edits skip the job, and a skipped job counts as passed.
+on:
+  pull_request:
+    types: [edited]
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional-title:
+    name: conventional-title
+    # Body-only edits skip the job, so they cost no billed minutes.
+    if: github.event.changes.title != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Check the title
+        env:
+          # Passed through env, never interpolated into the script.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: .github/scripts/check-pr-title.sh "$PR_TITLE"

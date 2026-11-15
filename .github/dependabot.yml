@@ -1,0 +1,48 @@
+version: 2
+
+# Weekly, grouped updates keep the PR count low on a single-maintainer repo.
+# Security updates arrive as soon as an advisory lands, independent of this
+# schedule; the `security` groups bundle them into one PR per ecosystem.
+# `cooldown` waits a week after a version is published before proposing it,
+# matching `exclude-newer` in pyproject.toml.
+#
+# Repository setting this file depends on: Settings -> Advanced Security ->
+# Runner type must be the standard GitHub runner. With "Labeled runner" the
+# update jobs wait for a self-hosted runner labelled `dependabot`, which this
+# repository does not have, and are cancelled after 24 hours in the queue.
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      minor-patch:
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/Warsaw
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]

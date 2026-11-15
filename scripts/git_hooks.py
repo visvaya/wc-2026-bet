@@ -1,0 +1,197 @@
+"""Git hook checks, called by the shims in `.githooks/`.
+
+Usage: python scripts/git_hooks.py pre-commit
+       python scripts/git_hooks.py commit-msg <message-file>
+
+Enable the hooks once per checkout with `git config core.hooksPath .githooks`.
+pre-commit checks that the commit identity is set, that the staged lines hold no
+em dash or emoji, and runs ruff on the staged Python files. commit-msg checks the
+Conventional Commits format, attribution and session trailers, em dash and emoji.
+
+A maintainer can require their own identity in their checkout (contributors leave
+this unset, so any configured identity passes):
+    git config --add hooks.ownerIdentities "Name <email>"
+"""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+SUBJECT = re.compile(rf"^(?:{TYPES})(?:\([a-z0-9._/-]+\))?!?: (?P<subject>.+)$")
+MAX_SUBJECT_CHARS = 72
+MAX_BODY_LINE_CHARS = 100
+# Subjects git writes itself; their format is not checked, as in commitlint's default ignores.
+GIT_SUBJECT = re.compile(r'^(?:Merge |Revert "|fixup! |squash! |amend! )')
+TRAILER = re.compile(r"^[A-Za-z0-9-]+: ")
+ATTRIBUTION_TRAILER = re.compile(r"^[\w-]*(?:co-authored-by|session|generated-by)[\w-]*:", re.I)
+GENERATED_LINE = re.compile(r"^\W*generated (?:with|by)\s", re.I)
+
+# Characters are built at runtime so this file passes its own check.
+EM_DASH = chr(0x2014)
+EM_DASH_MESSAGE = "em dash (U+2014); use an en dash (U+2013) or a middle dot (U+00B7)"
+EMOJI_RANGES = ((0x1F000, 0x1FAFF), (0x2600, 0x27BF), (0x2B50, 0x2B55), (0xFE0F, 0xFE0F))
+EMOJI = re.compile("[" + "".join(f"{chr(first)}-{chr(last)}" for first, last in EMOJI_RANGES) + "]")
+
+OWNER_KEY = "hooks.ownerIdentities"
+IDENTITY = re.compile(r"(?P<name>[^<>]+) <(?P<email>[^<>]+)>")
+IDENT_TIMESTAMP = re.compile(r" \d+ [+-]\d{4}$")
+# Explicit prefixes: diff.noprefix or diff.mnemonicPrefix in a user's config would change the `+++ b/` header.
+DIFF_OPTIONS = (
+    "--no-color",
+    "--no-ext-diff",
+    "--unified=0",
+    "--diff-filter=ACMR",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+)
+HUNK = re.compile(r"^@@ -\S+ \+(\d+)")
+GIT = shutil.which("git") or "git"
+
+
+class HookError(Exception):
+    """A git command the hook depends on failed."""
+
+
+def line_problems(where: str, line: str) -> list[str]:
+    """Forbidden characters in one line; the line itself is not echoed, a console may not print it."""
+
+    problems = [f"{where}: {EM_DASH_MESSAGE}"] if EM_DASH in line else []
+    return problems + ([f"{where}: emoji"] if EMOJI.search(line) else [])
+
+
+def commit_message_problems(raw: str) -> list[str]:
+    """Problems in a commit message as git writes it to the message file."""
+
+    lines: list[str] = []
+    for line in raw.split("\n"):
+        if line.startswith("# -") and " >8 " in line:
+            break  # `git commit --verbose` appends the diff below this line
+        if not line.startswith("#"):
+            lines.append(line.rstrip("\r"))
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    subject_line = lines[0] if lines else ""
+    problems: list[str] = []
+    if not GIT_SUBJECT.match(subject_line):
+        match = SUBJECT.match(subject_line)
+        if match is None:
+            problems.append(f"subject must be '<type>(<scope>): <subject>' with type one of {TYPES.replace('|', ', ')}")
+        elif len(match["subject"]) > MAX_SUBJECT_CHARS:
+            problems.append(f"subject is {len(match['subject'])} characters; the limit is {MAX_SUBJECT_CHARS}")
+        if subject_line.endswith("."):
+            problems.append("subject must not end with a period")
+
+    # Trailers are the key: value lines of the last paragraph after the subject, as git reads them.
+    blank_lines = [index for index, line in enumerate(lines) if not line.strip()]
+    trailer_start = blank_lines[-1] + 1 if blank_lines else len(lines)
+    for number, line in enumerate(lines, start=1):
+        if number > 1 and len(line) > MAX_BODY_LINE_CHARS:
+            problems.append(f"commit message:{number}: longer than {MAX_BODY_LINE_CHARS} characters")
+        is_trailer = number > trailer_start and TRAILER.match(line) is not None
+        if GENERATED_LINE.match(line) or (is_trailer and ATTRIBUTION_TRAILER.match(line)):
+            problems.append(f"commit message:{number}: attribution or session trailer; remove it")
+        problems += line_problems(f"commit message:{number}", line)
+    return problems
+
+
+def diff_text_problems(diff: str) -> list[str]:
+    """Forbidden characters in the added lines of a `git diff --unified=0` output."""
+
+    problems: list[str] = []
+    path, number, header = "", 0, True
+    for line in diff.split("\n"):
+        if line.startswith("diff --git "):
+            header = True
+        elif header and line.startswith("+++ "):
+            path = line.removeprefix("+++ b/")
+        elif match := HUNK.match(line):
+            header, number = False, int(match[1])
+        elif not header and line.startswith("+"):
+            problems += line_problems(f"{path}:{number}", line[1:])
+            number += 1
+    return problems
+
+
+def identity_problems(author: str, committer: str, owners: Sequence[str]) -> list[str]:
+    """Author and committer must be set, and be one of `owners` when the checkout lists any."""
+
+    allowed = {owner.casefold() for owner in owners}
+    problems: list[str] = []
+    for role, ident in (("author", author), ("committer", committer)):
+        who = IDENT_TIMESTAMP.sub("", ident.strip())
+        match = IDENTITY.fullmatch(who)
+        if match is None:
+            problems.append(f"{role} identity is not set; run git config user.name and git config user.email")
+        elif "@" not in match["email"]:
+            problems.append(f"{role} email {match['email']} is not a valid address; fix git config user.email")
+        elif allowed and who.casefold() not in allowed:
+            problems.append(f"{role} is {who}, not one of the identities in {OWNER_KEY}")
+    return problems
+
+
+def python_files(paths: Sequence[str]) -> list[str]:
+    return [path for path in paths if path.endswith((".py", ".pyi"))]
+
+
+def run(command: Sequence[str], cwd: Path | None = None, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 - fixed argument lists, no shell
+        list(command),
+        cwd=cwd,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def git(args: Sequence[str], cwd: Path | None = None) -> str:
+    result = run([GIT, *args], cwd)
+    if result.returncode != 0:
+        raise HookError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout
+
+
+def pre_commit() -> list[str]:
+    owners = [line.strip() for line in run([GIT, "config", "--get-all", OWNER_KEY]).stdout.splitlines()]
+    # `git var` fails when the identity is not set; an empty ident reports that.
+    author, committer = (run([GIT, "var", variable]).stdout for variable in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"))
+    problems = identity_problems(author, committer, [owner for owner in owners if owner])
+    problems += diff_text_problems(git(["diff", "--cached", *DIFF_OPTIONS]))
+    # ruff reads the staged blobs, so unstaged edits in the working tree neither hide nor cause a failure.
+    for path in python_files(git(["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"]).split("\0")):
+        staged = git(["show", f":{path}"])
+        for ruff_args in (["check"], ["format", "--check"]):
+            command = [sys.executable, "-m", "ruff", *ruff_args, "--force-exclude", "--stdin-filename", path, "-"]
+            result = run(command, stdin=staged)
+            if result.returncode != 0:
+                problems.append(f"ruff {' '.join(ruff_args)} {path} failed:\n{result.stdout}{result.stderr}".rstrip())
+    return problems
+
+
+def main(argv: Sequence[str]) -> int:
+    try:
+        match list(argv):
+            case ["pre-commit"]:
+                problems = pre_commit()
+            case ["commit-msg", message_file]:
+                problems = commit_message_problems(Path(message_file).read_text(encoding="utf-8"))
+            case _:
+                problems = ["usage: git_hooks.py pre-commit | git_hooks.py commit-msg <message-file>"]
+    except HookError as error:
+        problems = [str(error)]
+    for problem in problems:
+        print(f"[git hook] {problem}", file=sys.stderr)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,75 @@
+[build-system]
+# 77.0 is the first release that reads an SPDX `license` expression and `license-files`.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wc2026bet"
+version = "0.1.0"
+description = "World Cup 2026 betting model utilities"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+# Pillow 13.0 fixes four critical advisories (among them GHSA-8g5g-8vmr-9782) open against 12.3;
+# exact versions live in uv.lock.
+dependencies = ["Pillow>=13.0", "pytesseract>=0.3.13", "PyMuPDF>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.14", "mypy>=1.19"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["wc2026bet"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = ["-p", "no:cacheprovider"]
+markers = [
+    "real_data: needs the real snapshots; runs only when WC2026BET_DATA_DIR names a directory with base-data/ and data/manual/",
+]
+
+[tool.coverage.run]
+# A path, not the package name: the root `wc2026bet/` shim would shadow it.
+source = ["src/wc2026bet"]
+
+[tool.coverage.report]
+# Calibrated on the CI runner (ubuntu, Python 3.13), not locally: two runs on 2026-09-30 both
+# measured 82.44% (2848 statements, 500 missed); Windows measures about one point higher.
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+src = ["src", "tests"]
+extend-exclude = ["base-data", "data", "outputs", ".test-artifacts", ".pytest_tmp"]
+
+[tool.ruff.lint]
+# "S" is flake8-bandit: a fast local security check; CodeQL runs in CI.
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest assertions.
+"tests/*" = ["S101"]
+# Markdown table row templates read better on one line.
+"src/wc2026bet/decision_report.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+files = ["src/wc2026bet", "scripts"]
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Third-party packages without type stubs.
+module = ["fitz", "pytesseract"]
+ignore_missing_imports = true
+
+[tool.uv]
+# Release-age protection: resolve only versions published at least a week ago, matching the
+# Dependabot cooldown. For an urgent security fix newer than that, add a per-package override
+# with `exclude-newer-package` instead of dropping this setting.
+exclude-newer = "7 days"
