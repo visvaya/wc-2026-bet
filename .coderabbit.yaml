@@ -19,5 +19,6 @@ reviews:
         on problems the pull request did not cause with "Pre-existing:". Do not comment on what the CI job
         `check` already enforces: ruff check, ruff format, mypy, pytest with the coverage threshold from
         pyproject.toml, the gitleaks secret scan and the Conventional Commits title check; or on what the
-        security job enforces: pip-audit, zizmor and actionlint; or on em dash and emoji, which the
+        security job enforces: pip-audit on production dependencies (development findings only warn,
+        so do flag those), zizmor and actionlint; or on em dash and emoji, which the
         commit hooks reject.
