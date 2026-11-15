@@ -2,11 +2,8 @@
 // Weekly freshness check for the versioned items no dependency bot updates, run by
 // .github/workflows/freshness.yml.
 // Reads .github/freshness.json, the project's one list of versioned items and their mechanisms, and
-// checks every item whose mechanism is "job":
-//   - a pin (file + pattern, first capture group is the version) against the newest stable release on
-//     GitHub or npm that is at least minimumReleaseAgeDays old;
-//   - the Node floor: the lowest version in package.json engines.node against the newest security
-//     release of the major line in .nvmrc (security releases are not held by the release age).
+// checks every item whose mechanism is "job": a pin (file + pattern, first capture group is the version)
+// against the newest stable release on GitHub, npm or PyPI that is at least minimumReleaseAgeDays old.
 // Usage: node scripts/check-freshness.mjs [path/to/freshness.json]   (GITHUB_TOKEN raises the API limit)
 // Exit codes: 0 all current, 1 outdated item, unreadable pin or invalid list, 2 network or API failure.
 import { readFileSync, realpathSync } from 'node:fs';
@@ -57,8 +54,8 @@ export const parseList = (raw) => {
       const check = item.check ?? {};
       const isPin = typeof check.file === 'string' && typeof check.pattern === 'string';
       const sources = ['github', 'npm', 'pypi'].filter((key) => typeof check[key] === 'string');
-      if (check.nodeFloor !== true && !(isPin && sources.length === 1))
-        errors.push(`${label}: a job check needs nodeFloor: true, or file, pattern and one of github, npm or pypi`);
+      if (!(isPin && sources.length === 1))
+        errors.push(`${label}: a job check needs file, pattern and one of github, npm or pypi`);
       if (isPin && typeof item.howToBump !== 'string') errors.push(`${label}: howToBump is missing`);
     }
   });
@@ -67,53 +64,6 @@ export const parseList = (raw) => {
 
 /** The pinned version of a job item, or undefined when the pattern no longer matches. */
 export const readPin = (text, pattern) => parseVersion(new RegExp(pattern, 'm').exec(text)?.[1]);
-
-/**
- * The lowest version a range admits ("^26.12.1", ">=26.12.1 <27", "^24.12.0 || ^26.12.1"): within one
- * || branch every comparator must hold, so its floor is the highest lower bound; across branches the lowest
- * floor wins. Upper bounds (<, <=) do not limit it, and a hyphen range ("26.12.1 - 26.14.0") starts at its
- * first end. Undefined when no full version is given.
- */
-export const engineFloor = (range) =>
-  (range ?? '')
-    .split('||')
-    .map((branch) =>
-      branch
-        .replace(/ - .*$/, '')
-        .replaceAll(/([<>]=?) +/g, '$1')
-        .split(' ')
-        .filter((part) => part !== '' && !part.startsWith('<'))
-        .map(parseVersion)
-        .filter((version) => version !== undefined)
-        .toSorted(compareVersions)
-        .at(-1)
-    )
-    .filter((floor) => floor !== undefined)
-    .toSorted(compareVersions)[0];
-
-/** Outcome of the Node floor check from .nvmrc, engines.node and nodejs.org/dist/index.json. */
-export const nodeFloorResult = ({ nvmrc, engines, index }) => {
-  const major = Number(/^[ ]*v?([0-9]+)/.exec(nvmrc ?? '')?.[1]);
-  const floor = engineFloor(engines);
-  if (!Number.isInteger(major) || floor === undefined)
-    return { status: 'unreadable', text: 'needs a major line in .nvmrc and a full version in package.json engines.node' };
-  const newestSecurity = index
-    .filter((entry) => entry.security === true)
-    .map((entry) => parseVersion(entry.version))
-    .filter((version) => version !== undefined && version[0] === major)
-    .reduce((best, version) => (best === undefined || compareVersions(version, best) > 0 ? version : best), undefined);
-  if (newestSecurity === undefined) return { status: 'ok', text: `floor ${show(floor)}, no security release of Node ${major} yet` };
-  // The suggestion keeps the project's operator: a preinstall check may accept only one form.
-  const operator = /^ *(\^|~|>=)/.exec(engines)?.[1] ?? '>=';
-  return compareVersions(floor, newestSecurity) < 0
-    ? {
-        status: 'outdated',
-        text:
-          `floor ${show(floor)} is below the security release ${show(newestSecurity)}: set engines.node to ` +
-          `${operator}${show(newestSecurity)} (the preinstall check refuses older Node), install it locally, then run the gate`,
-      }
-    : { status: 'ok', text: `floor ${show(floor)}, newest security release ${show(newestSecurity)}` };
-};
 
 /** Outcome of a pin against the newest eligible release. */
 export const pinResult = ({ pinned, newest, howToBump, minAgeDays }) => {
@@ -156,11 +106,6 @@ export const checkItems = async ({ list, readText, fetchJson, nowMs }) => {
   return Promise.all(
     jobs.map(async (item) => {
       const { check } = item;
-      if (check.nodeFloor === true) {
-        const engines = JSON.parse(readText('package.json')).engines?.node;
-        const index = await fetchJson('https://nodejs.org/dist/index.json');
-        return { name: item.name, ...nodeFloorResult({ nvmrc: readText('.nvmrc'), engines, index }) };
-      }
       const pinned = readPin(readText(check.file), check.pattern);
       const source = Object.keys(RELEASE_SOURCES).find((key) => typeof check[key] === 'string');
       const releases = await RELEASE_SOURCES[source](fetchJson, check[source]);
