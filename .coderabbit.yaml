@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  high_level_summary_in_walkthrough: true
+  poem: false
+  commit_status: true
+  fail_commit_status: true
+  path_filters:
+    - "!uv.lock"
+  path_instructions:
+    - path: "**"
+      instructions: >-
+        Rules of this repository: it never contains third-party source snapshots (bookmaker odds, Opta
+        data, FIFA documents) or values copied from them; tests use the synthetic data in
+        tests/synthetic_data.py, and tests marked real_data read snapshots only from WC2026BET_DATA_DIR.
+        Model rules live in docs/model-spec.md and the file contracts in docs/data-contracts.md. Prefer
+        lean code: reuse existing helpers, no options or layers without a current caller. Prefix comments
+        on problems the pull request did not cause with "Pre-existing:". Do not comment on what the CI job
+        `check` already enforces: ruff check, ruff format, mypy, pytest with the coverage threshold from
+        pyproject.toml, the gitleaks secret scan and the Conventional Commits title check; or on what the
+        security job enforces: pip-audit, zizmor and actionlint; or on em dash and emoji, which the
+        commit hooks reject.
