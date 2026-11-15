@@ -1,0 +1,76 @@
+{
+  "minimumReleaseAgeDays": 7,
+  "items": [
+    { "name": "Python packages", "mechanism": "dependabot", "where": "uv, /; exclude-newer in pyproject.toml" },
+    { "name": "GitHub Actions", "mechanism": "dependabot", "where": "github-actions, /; pinned by commit" },
+    {
+      "name": "Python patch",
+      "mechanism": "check-latest",
+      "where": ".python-version holds the 3.13 line; uv installs the newest patch it knows, so the patch follows the uv pin"
+    },
+    {
+      "name": "Python line",
+      "mechanism": "manual",
+      "where": "requires-python in pyproject.toml and .python-version; move before Python 3.13 reaches end of support (October 2029)"
+    },
+    {
+      "name": "Node for CI tools",
+      "mechanism": "check-latest",
+      "where": "setup-node node-version 24 with check-latest in ci.yml and freshness.yml; move to the next LTS line when 24 leaves active support"
+    },
+    {
+      "name": "uv (ci.yml)",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/ci.yml", "pattern": "[^-]version:[ \"]*([0-9.]+)", "github": "astral-sh/uv" },
+      "howToBump": "update the setup-uv version in ci.yml and security.yml"
+    },
+    {
+      "name": "uv (security.yml)",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/security.yml", "pattern": "[^-]version:[ \"]*([0-9.]+)", "github": "astral-sh/uv" },
+      "howToBump": "update the setup-uv version in ci.yml and security.yml"
+    },
+    {
+      "name": "gitleaks",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/ci.yml", "pattern": "GITLEAKS_VERSION:[ \"]*([0-9.]+)", "github": "gitleaks/gitleaks" },
+      "howToBump": "update GITLEAKS_VERSION and GITLEAKS_SHA256 from the release checksums file"
+    },
+    {
+      "name": "lychee",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/ci.yml", "pattern": "LYCHEE_VERSION:[ \"]*([0-9.]+)", "github": "lycheeverse/lychee" },
+      "howToBump": "update LYCHEE_VERSION and LYCHEE_SHA256 from the .sha256 file of the Linux GNU archive"
+    },
+    {
+      "name": "markdownlint-cli2",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/ci.yml", "pattern": "markdownlint-cli2@([0-9.]+)", "npm": "markdownlint-cli2" },
+      "howToBump": "update the version in ci.yml and CONTRIBUTING.md"
+    },
+    {
+      "name": "actionlint",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/security.yml", "pattern": "ACTIONLINT_VERSION:[ \"]*([0-9.]+)", "github": "rhysd/actionlint" },
+      "howToBump": "update ACTIONLINT_VERSION and ACTIONLINT_SHA256 from the release checksums file"
+    },
+    {
+      "name": "ShellCheck",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/security.yml", "pattern": "SHELLCHECK_VERSION:[ \"]*([0-9.]+)", "github": "koalaman/shellcheck" },
+      "howToBump": "update SHELLCHECK_VERSION and SHELLCHECK_SHA256 from the digest GitHub shows for the linux.x86_64.tar.gz asset"
+    },
+    {
+      "name": "pip-audit",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/security.yml", "pattern": "PIP_AUDIT_VERSION:[ \"]*([0-9.]+)", "pypi": "pip-audit" },
+      "howToBump": "update PIP_AUDIT_VERSION in security.yml"
+    },
+    {
+      "name": "zizmor",
+      "mechanism": "job",
+      "check": { "file": ".github/workflows/security.yml", "pattern": "ZIZMOR_VERSION:[ \"]*([0-9.]+)", "pypi": "zizmor" },
+      "howToBump": "update ZIZMOR_VERSION in security.yml"
+    }
+  ]
+}

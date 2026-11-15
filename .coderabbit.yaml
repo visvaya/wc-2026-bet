@@ -6,6 +6,9 @@ reviews:
   poem: false
   commit_status: true
   fail_commit_status: true
+  auto_review:
+    # A paused review still reports a green status, so later fix rounds would merge unreviewed.
+    auto_pause_after_reviewed_commits: 0
   path_filters:
     - "!uv.lock"
   path_instructions:
@@ -18,7 +21,13 @@ reviews:
         lean code: reuse existing helpers, no options or layers without a current caller. Prefix comments
         on problems the pull request did not cause with "Pre-existing:". Do not comment on what the CI job
         `check` already enforces: ruff check, ruff format, mypy, pytest with the coverage threshold from
-        pyproject.toml, the gitleaks secret scan and the Conventional Commits title check; or on what the
+        pyproject.toml, markdownlint-cli2 and the offline lychee link check on Markdown, the gitleaks
+        secret scan and the Conventional Commits title check; or on what the
         security job enforces: pip-audit on production dependencies (development findings only warn,
-        so do flag those), zizmor and actionlint; or on em dash and emoji, which the
+        so do flag those), zizmor, ShellCheck and actionlint; or on em dash and emoji, which the
         commit hooks reject.
+knowledge_base:
+  learnings:
+    scope: local
+chat:
+  art: false
