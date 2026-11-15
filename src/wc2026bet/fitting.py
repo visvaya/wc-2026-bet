@@ -7,6 +7,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+from wc2026bet.csv_io import write_csv
 from wc2026bet.manual_odds import parse_manual_odds
 from wc2026bet.odds import power_devig, proportional_devig
 from wc2026bet.score_grid import ScoreGrid
@@ -101,11 +102,7 @@ def fit_group_match_params(
             }
         )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=MATCH_SCORE_PARAM_FIELDS)
-        writer.writeheader()
-        writer.writerows(output_rows)
+    write_csv(output_path, MATCH_SCORE_PARAM_FIELDS, output_rows)
     if config_output_path is not None:
         write_score_model_config(config, config_output_path)
     return len(output_rows)
@@ -157,11 +154,10 @@ def fit_global_score_model(
 def write_score_model_config(config: ScoreModelConfig, output_path: Path) -> None:
     """Write fitted global score-grid configuration."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=SCORE_MODEL_CONFIG_FIELDS)
-        writer.writeheader()
-        writer.writerow(
+    write_csv(
+        output_path,
+        SCORE_MODEL_CONFIG_FIELDS,
+        [
             {
                 "max_goals": str(config.max_goals),
                 "total_dispersion_tilt": f"{config.total_dispersion_tilt:.6f}",
@@ -170,7 +166,8 @@ def write_score_model_config(config: ScoreModelConfig, output_path: Path) -> Non
                 "max_abs_error": f"{config.max_abs_error:.6f}",
                 "unique_market_shapes": str(config.unique_market_shapes),
             }
-        )
+        ],
+    )
 
 
 def read_score_model_config(path: Path) -> ScoreModelConfig:

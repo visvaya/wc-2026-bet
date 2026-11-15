@@ -16,6 +16,7 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
+from wc2026bet.csv_io import write_csv
 from wc2026bet.manual_odds import ODDS_FIELDS, parse_manual_odds
 from wc2026bet.models import Match
 from wc2026bet.parsers import parse_base_matches
@@ -277,9 +278,9 @@ def write_odds_ocr_outputs(
                     }
                 )
 
-    _write_csv(raw_path, RAW_ODDS_FIELDS, all_raw_rows)
-    _write_csv(review_path, REVIEW_ODDS_FIELDS, all_review_rows)
-    _write_csv(match_order_path or raw_path.parent / "match_order.csv", MATCH_ORDER_FIELDS, all_match_order_rows)
+    write_csv(raw_path, RAW_ODDS_FIELDS, all_raw_rows)
+    write_csv(review_path, REVIEW_ODDS_FIELDS, all_review_rows)
+    write_csv(match_order_path or raw_path.parent / "match_order.csv", MATCH_ORDER_FIELDS, all_match_order_rows)
     return len(all_raw_rows)
 
 
@@ -488,7 +489,7 @@ def promote_review_odds(review_path: Path, base_data: Path, output_path: Path) -
     _validate_review_statuses(review_path)
     rows = parse_manual_odds(review_path, base_data)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_csv(output_path, ODDS_FIELDS, rows)
+    write_csv(output_path, ODDS_FIELDS, rows)
     return len(rows)
 
 
@@ -700,14 +701,6 @@ def _resolve_source_path(source_file: Path, base_data: Path) -> Path:
     if source_file.is_absolute() or source_file.exists():
         return source_file
     return base_data / source_file
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def _mtime_iso(path: Path) -> str:

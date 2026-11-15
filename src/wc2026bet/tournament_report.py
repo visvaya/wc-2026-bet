@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import csv
 import math
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+
+from wc2026bet.csv_io import fmt
 
 STADIUM_AVERAGE_FIELDS = (
     "stadium_fifa",
@@ -217,14 +217,3 @@ def _fair_odds(probability: float) -> str:
     if probability <= 0:
         return ""
     return fmt(1.0 / probability)
-
-
-def write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def fmt(value: float) -> str:
-    return f"{value:.6f}"

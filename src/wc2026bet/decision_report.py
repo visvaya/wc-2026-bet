@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Iterable
 from pathlib import Path
+
+from wc2026bet.csv_io import read_csv
 
 
 def build_decision_report(
@@ -20,22 +21,22 @@ def build_decision_report(
 ) -> int:
     """Build a markdown report with provenance, diagnostics, and value verdict."""
 
-    average_rows = _read_csv(output_dir / "stadium-average-ranking.csv")
-    total_rows = _read_csv(output_dir / "stadium-total-ranking.csv")
+    average_rows = read_csv(output_dir / "stadium-average-ranking.csv")
+    total_rows = read_csv(output_dir / "stadium-total-ranking.csv")
     score_config = _single_row(processed_dir / "score_model_config.csv")
     bridge = _single_row(processed_dir / "rating_goal_bridge.csv")
-    match_params = _read_csv(processed_dir / "match_score_params.csv")
+    match_params = read_csv(processed_dir / "match_score_params.csv")
     source_rows = _source_rows(processed_dir)
     value_rows = [
         row for row in average_rows if _float_or_none(row["ev"]) is not None and float(row["ev"]) >= value_threshold
     ]
-    opta_rows = _read_csv(output_dir / "opta-calibration.csv") if (output_dir / "opta-calibration.csv").exists() else []
+    opta_rows = read_csv(output_dir / "opta-calibration.csv") if (output_dir / "opta-calibration.csv").exists() else []
     opta_standing_path = output_dir / "opta-standings-calibration.csv"
-    opta_standing_rows = _read_csv(opta_standing_path) if opta_standing_path.exists() else []
+    opta_standing_rows = read_csv(opta_standing_path) if opta_standing_path.exists() else []
     sensitivity_path = output_dir / "sensitivity" / "stadium-average-sensitivity.csv"
-    sensitivity_rows = _read_csv(sensitivity_path) if sensitivity_path.exists() else []
+    sensitivity_rows = read_csv(sensitivity_path) if sensitivity_path.exists() else []
     opta_impact_path = output_dir / "sensitivity" / "opta-calibration-impact.csv"
-    opta_impact_rows = _read_csv(opta_impact_path) if opta_impact_path.exists() else []
+    opta_impact_rows = read_csv(opta_impact_path) if opta_impact_path.exists() else []
 
     lines = [
         "# Tournament Betting Decision Report",
@@ -137,7 +138,7 @@ def _source_rows(processed_dir: Path) -> list[dict[str, str]]:
     for dataset, path in specs:
         if not path.exists():
             continue
-        source_rows = _read_csv(path)
+        source_rows = read_csv(path)
         rows.append(
             {
                 "dataset": dataset,
@@ -314,7 +315,7 @@ def _max_abs_value(rows: list[dict[str, str]], field: str) -> float | None:
 
 
 def _single_row(path: Path) -> dict[str, str]:
-    rows = _read_csv(path)
+    rows = read_csv(path)
     if len(rows) != 1:
         raise ValueError(f"Expected one row in {path}, found {len(rows)}")
     return rows[0]
@@ -329,8 +330,3 @@ def _float_or_none(value: str) -> float | None:
     if value == "":
         return None
     return float(value)
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))

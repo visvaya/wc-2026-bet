@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import csv
-from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 
+from wc2026bet.csv_io import write_csv
 from wc2026bet.manual_odds import ODDS_FIELDS, REQUIRED_MARKET_SELECTIONS, parse_manual_odds
 from wc2026bet.models import Match, OptaPrediction, OptaStandingRow, StadiumMarketOdd, TeamRating
 from wc2026bet.parsers import (
@@ -91,20 +90,20 @@ def build_processed_data(base_data: Path, out_dir: Path, manual_dir: Path) -> di
     _validate_opta_coverage(opta_predictions, group_teams)
     _validate_opta_standings(opta_standings, opta_predictions, group_teams)
 
-    _write_csv(out_dir / "matches.csv", MATCH_FIELDS, [_match_row(match) for match in matches])
-    _write_csv(out_dir / "teams.csv", TEAM_FIELDS, [_team_row(team, ratings[team]) for team in group_teams])
-    _write_csv(out_dir / "stadiums.csv", STADIUM_FIELDS, _stadium_rows(matches))
-    _write_csv(
+    write_csv(out_dir / "matches.csv", MATCH_FIELDS, [_match_row(match) for match in matches])
+    write_csv(out_dir / "teams.csv", TEAM_FIELDS, [_team_row(team, ratings[team]) for team in group_teams])
+    write_csv(out_dir / "stadiums.csv", STADIUM_FIELDS, _stadium_rows(matches))
+    write_csv(
         out_dir / "stadium_market_odds.csv",
         STADIUM_MARKET_FIELDS,
         [_stadium_market_row(odd, stadium_market_source) for odd in stadium_market_odds],
     )
-    _write_csv(
+    write_csv(
         out_dir / "opta_predictions.csv",
         OPTA_FIELDS,
         [_opta_row(prediction, opta_source) for prediction in opta_predictions],
     )
-    _write_csv(
+    write_csv(
         out_dir / "opta_standings.csv",
         OPTA_STANDINGS_FIELDS,
         [_opta_standing_row(row, opta_standings_source) for row in opta_standings],
@@ -122,7 +121,7 @@ def build_processed_data(base_data: Path, out_dir: Path, manual_dir: Path) -> di
     manual_odds_path = manual_dir / "odds.csv"
     if manual_odds_path.exists():
         odds_rows = parse_manual_odds(manual_odds_path, base_data)
-        _write_csv(out_dir / "odds.csv", ODDS_FIELDS, odds_rows)
+        write_csv(out_dir / "odds.csv", ODDS_FIELDS, odds_rows)
         result["odds"] = len(odds_rows)
 
     return result
@@ -152,16 +151,8 @@ def write_odds_template(base_data: Path, output_path: Path) -> int:
                         "manual_override": "true",
                     }
                 )
-    _write_csv(output_path, ODDS_TEMPLATE_FIELDS, rows)
+    write_csv(output_path, ODDS_TEMPLATE_FIELDS, rows)
     return len(rows)
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: Sequence[Mapping[str, object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def _match_row(match: Match) -> dict[str, object]:

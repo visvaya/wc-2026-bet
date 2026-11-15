@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
 from pathlib import Path
 
+from wc2026bet.csv_io import fmt, read_csv, write_csv
 from wc2026bet.tournament_simulation import simulate_tournament
 
 SENSITIVITY_FIELDS = (
@@ -82,13 +82,13 @@ def run_sensitivity(
         )
         if scenario.name == "baseline":
             baseline_probabilities_path = scenario_dir / "team-tournament.csv"
-        scenario_rows[scenario.name] = _read_csv(scenario_dir / "stadium-average-ranking.csv")
+        scenario_rows[scenario.name] = read_csv(scenario_dir / "stadium-average-ranking.csv")
 
     aggregate_rows = _aggregate_sensitivity(scenario_rows)
     aggregate_path = output_dir / "stadium-average-sensitivity.csv"
-    _write_csv(aggregate_path, SENSITIVITY_FIELDS, aggregate_rows)
+    write_csv(aggregate_path, SENSITIVITY_FIELDS, aggregate_rows)
     impact_rows = _opta_calibration_impact_rows(scenario_rows)
-    _write_csv(output_dir / "opta-calibration-impact.csv", OPTA_CALIBRATION_IMPACT_FIELDS, impact_rows)
+    write_csv(output_dir / "opta-calibration-impact.csv", OPTA_CALIBRATION_IMPACT_FIELDS, impact_rows)
     return {
         "scenarios": len(DEFAULT_SCENARIOS),
         "stadium_average_sensitivity": len(aggregate_rows),
@@ -111,12 +111,12 @@ def _aggregate_sensitivity(
             {
                 "stadium_fifa": stadium,
                 "baseline_probability": baseline_row["prob_highest_average"],
-                "min_probability": _fmt(min(probabilities)),
-                "max_probability": _fmt(max(probabilities)),
-                "min_fair_odds": _fmt(min(fair_odds)) if fair_odds else "",
-                "max_fair_odds": _fmt(max(fair_odds)) if fair_odds else "",
-                "min_ev": _fmt(min(ev_values)) if ev_values else "",
-                "max_ev": _fmt(max(ev_values)) if ev_values else "",
+                "min_probability": fmt(min(probabilities)),
+                "max_probability": fmt(max(probabilities)),
+                "min_fair_odds": fmt(min(fair_odds)) if fair_odds else "",
+                "max_fair_odds": fmt(max(fair_odds)) if fair_odds else "",
+                "min_ev": fmt(min(ev_values)) if ev_values else "",
+                "max_ev": fmt(max(ev_values)) if ev_values else "",
                 "stable_top_candidate": "true" if top_stadiums == {stadium} else "false",
             }
         )
@@ -140,7 +140,7 @@ def _opta_calibration_impact_rows(
                 "stadium_fifa": stadium,
                 "baseline_probability": baseline_row["prob_highest_average"],
                 "opta_calibrated_probability": calibrated_row["prob_highest_average"],
-                "delta_probability": _fmt(calibrated_probability - baseline_probability),
+                "delta_probability": fmt(calibrated_probability - baseline_probability),
                 "baseline_ev": baseline_row["ev"],
                 "opta_calibrated_ev": calibrated_row["ev"],
             }
@@ -152,19 +152,3 @@ def _indexed_rows(
     scenario_rows: dict[str, list[dict[str, str]]],
 ) -> dict[str, dict[str, dict[str, str]]]:
     return {scenario: {row["stadium_fifa"]: row for row in rows} for scenario, rows in scenario_rows.items()}
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _fmt(value: float) -> str:
-    return f"{value:.6f}"
