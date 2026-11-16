@@ -70,34 +70,25 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: uv sync --locked --extra dev
 
-      - name: Lint
-        if: steps.scope.outputs.docs_only != 'true'
-        run: ruff check .
-
-      - name: Format
-        if: steps.scope.outputs.docs_only != 'true'
-        run: ruff format --check .
-
-      - name: Typecheck
-        if: steps.scope.outputs.docs_only != 'true'
-        run: mypy
-
-      # Coverage threshold: `fail_under` in pyproject.toml.
-      - name: Test
-        if: steps.scope.outputs.docs_only != 'true'
-        run: python -m pytest --cov
-
-      # Documentation checks run on every change, documentation-only ones included.
+      # Node runs jscpd and markdownlint inside the gate, and the Markdown lint below.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ !cancelled() }}
         with:
           node-version: 24
           check-latest: true
 
+      # The same command as locally: lint, format, types, import contracts, dead code, the em dash
+      # and emoji scan, tests with the coverage threshold, duplication and Markdown lint.
+      - name: Gate
+        if: steps.scope.outputs.docs_only != 'true'
+        run: python scripts/gate.py
+
+      # Documentation-only pull requests skip the gate, which lints Markdown otherwise.
       - name: Markdown lint
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.scope.outputs.docs_only == 'true' }}
         run: npx --yes markdownlint-cli2@0.24.0 "**/*.md"
 
+      # Documentation checks run on every change, documentation-only ones included.
       - name: Install lychee
         if: ${{ !cancelled() }}
         run: |

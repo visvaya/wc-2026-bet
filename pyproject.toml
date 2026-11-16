@@ -34,9 +34,10 @@ markers = [
 source = ["src/wc2026bet"]
 
 [tool.coverage.report]
-# Calibrated on the CI runner (ubuntu, Python 3.13), not locally: two runs on 2026-09-30 both
-# measured 82.44% (2848 statements, 500 missed); Windows measures about one point higher.
-fail_under = 80
+# A ratchet: it only goes up. Calibrated on the CI runner (ubuntu, Python 3.13), not locally, because
+# Windows measures about one point higher: on 2026-11-16 CI measured 84.09% on main (2697 statements,
+# 429 missed) while Windows measured 85.06% on the same commit.
+fail_under = 84
 show_missing = true
 skip_covered = true
 

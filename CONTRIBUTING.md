@@ -18,19 +18,15 @@ The hooks run `scripts/git_hooks.py` through uv:
 
 ## Before opening a pull request
 
-Run the same gate as CI:
+Run the same gate as CI (jscpd and markdownlint need Node.js 22 or newer):
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy
-uv run python -m pytest
-npx --yes markdownlint-cli2@0.24.0 "**/*.md"   # needs Node.js 22 or newer
+uv run python scripts/gate.py
 ```
 
-CI also checks the relative links and anchors in the Markdown files with [lychee](https://github.com/lycheeverse/lychee) (`lychee --offline --include-fragments`); run it locally if you have it installed.
+It runs `ruff check`, `ruff format --check`, `mypy` (strict, on `src`, `tests` and `scripts`), the import contracts in `pyproject.toml` (import-linter), `vulture`, the em dash and emoji scan of the tracked files (`scripts/git_hooks.py scan`), `pytest --cov` against the `fail_under` threshold in `pyproject.toml`, jscpd with `.jscpd.json` and markdownlint. Every step runs even after a failure, and a summary lists the exit code and duration of each.
 
-CI also runs the tests with `--cov` against the `fail_under` threshold in `pyproject.toml`; add it locally when your change touches `src/`.
+CI also checks the relative links and anchors in the Markdown files with [lychee](https://github.com/lycheeverse/lychee) (`lychee --offline --include-fragments`); run it locally if you have it installed.
 
 Tests write only to `tmp_path` (the suite points it at `.test-artifacts/pytest`) and read data through paths computed from the repository root. The default suite uses generated synthetic data; tests marked `real_data` need the source snapshots and run only when `WC2026BET_DATA_DIR` is set (see the README).
 
