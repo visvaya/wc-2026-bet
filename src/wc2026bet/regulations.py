@@ -9,6 +9,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
 
+from wc2026bet.csv_io import write_csv
+
 R32_MAPPING_FIELDS = (
     "option",
     "qualified_third_groups",
@@ -87,11 +89,7 @@ def write_r32_third_place_mapping(
     """Write Annex C mapping CSV and optional raw text extract."""
 
     rows = extract_r32_third_place_mapping(pdf_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=R32_MAPPING_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(output_path, R32_MAPPING_FIELDS, rows)
 
     if raw_output_path is not None:
         raw_output_path.parent.mkdir(parents=True, exist_ok=True)

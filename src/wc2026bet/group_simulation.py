@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import csv
 import random
-from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from wc2026bet.csv_io import fmt, read_csv, write_csv
 from wc2026bet.fitting import read_score_model_config
-from wc2026bet.score_grid import ScoreGrid
+from wc2026bet.group_table import ScoreSampler, apply_match, initial_table, table_sort_key
 
 GROUP_GOALS_FIELDS = ("group", "expected_goals", "p05", "p50", "p95")
 TEAM_GROUP_FIELDS = (
@@ -78,20 +77,6 @@ class TeamSimulationStats:
     best_third_count: int = 0
 
 
-@dataclass
-class TeamTableRow:
-    team: str
-    group: str
-    points: int = 0
-    gf: int = 0
-    ga: int = 0
-    random_tiebreaker: float = 0.0
-
-    @property
-    def gd(self) -> int:
-        return self.gf - self.ga
-
-
 def simulate_group_stage(
     processed_dir: Path,
     output_dir: Path,
@@ -104,11 +89,11 @@ def simulate_group_stage(
     if simulations <= 0:
         raise ValueError("simulations must be positive")
 
-    matches = [row for row in _read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"]
-    params = {row["match_id"]: row for row in _read_csv(processed_dir / "match_score_params.csv")}
-    opta = {row["team"]: row for row in _read_csv(processed_dir / "opta_predictions.csv")}
+    matches = [row for row in read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"]
+    params = {row["match_id"]: row for row in read_csv(processed_dir / "match_score_params.csv")}
+    opta = {row["team"]: row for row in read_csv(processed_dir / "opta_predictions.csv")}
     opta_standings_path = processed_dir / "opta_standings.csv"
-    opta_standings = _read_csv(opta_standings_path) if opta_standings_path.exists() else []
+    opta_standings = read_csv(opta_standings_path) if opta_standings_path.exists() else []
     score_config = read_score_model_config(processed_dir / "score_model_config.csv")
     missing_params = sorted({match["match_id"] for match in matches} - set(params), key=int)
     if missing_params:
@@ -116,7 +101,7 @@ def simulate_group_stage(
 
     rng = random.Random(seed)  # noqa: S311 - seedable Monte Carlo sampling, not cryptography
     samplers = {
-        match["match_id"]: _ScoreSampler(
+        match["match_id"]: ScoreSampler(
             float(params[match["match_id"]]["lambda_home"]),
             float(params[match["match_id"]]["lambda_away"]),
             max_goals=score_config.max_goals,
@@ -132,7 +117,7 @@ def simulate_group_stage(
     stadium_counts: dict[str, int] = defaultdict(int)
 
     for _ in range(simulations):
-        table = _initial_table(matches, rng)
+        table = initial_table(matches, rng)
         group_goals: dict[str, int] = defaultdict(int)
 
         for match in matches:
@@ -141,7 +126,7 @@ def simulate_group_stage(
             away = match["team_away"]
             group = match["group"]
             stadium = match["stadium_fifa"]
-            _apply_match(table[(group, home)], table[(group, away)], home_goals, away_goals)
+            apply_match(table[(group, home)], table[(group, away)], home_goals, away_goals)
             home_points, away_points = _match_points(home_goals, away_goals)
             team_stats[home].points_total += home_points
             team_stats[away].points_total += away_points
@@ -157,7 +142,7 @@ def simulate_group_stage(
         for group in sorted({match["group"] for match in matches}):
             group_table = sorted(
                 [row for (row_group, _), row in table.items() if row_group == group],
-                key=_table_sort_key,
+                key=table_sort_key,
                 reverse=True,
             )
             team_stats[group_table[0].team].top_group_count += 1
@@ -167,7 +152,7 @@ def simulate_group_stage(
             third_rows.append(group_table[2])
             group_goal_values[group].append(group_goals[group])
 
-        best_thirds = sorted(third_rows, key=_table_sort_key, reverse=True)[:8]
+        best_thirds = sorted(third_rows, key=table_sort_key, reverse=True)[:8]
         for row in best_thirds:
             team_stats[row.team].best_third_count += 1
             team_stats[row.team].l32_count += 1
@@ -179,17 +164,17 @@ def simulate_group_stage(
     opta_rows = _opta_calibration_rows(team_rows, opta)
     opta_standing_rows = _opta_standings_calibration_rows(team_rows, opta_standings)
     opta_third_rows = _opta_third_place_snapshot_rows(team_rows, opta_standings)
-    _write_csv(output_dir / "group-goals.csv", GROUP_GOALS_FIELDS, group_rows)
-    _write_csv(output_dir / "team-group.csv", TEAM_GROUP_FIELDS, team_rows)
-    _write_csv(output_dir / "stadium-group-ranking.csv", STADIUM_GROUP_FIELDS, stadium_rows)
-    _write_csv(output_dir / "opta-calibration.csv", OPTA_CALIBRATION_FIELDS, opta_rows)
+    write_csv(output_dir / "group-goals.csv", GROUP_GOALS_FIELDS, group_rows)
+    write_csv(output_dir / "team-group.csv", TEAM_GROUP_FIELDS, team_rows)
+    write_csv(output_dir / "stadium-group-ranking.csv", STADIUM_GROUP_FIELDS, stadium_rows)
+    write_csv(output_dir / "opta-calibration.csv", OPTA_CALIBRATION_FIELDS, opta_rows)
     if opta_standings:
-        _write_csv(
+        write_csv(
             output_dir / "opta-standings-calibration.csv",
             OPTA_STANDINGS_CALIBRATION_FIELDS,
             opta_standing_rows,
         )
-        _write_csv(
+        write_csv(
             output_dir / "opta-third-place-snapshot.csv",
             OPTA_THIRD_PLACE_SNAPSHOT_FIELDS,
             opta_third_rows,
@@ -204,40 +189,6 @@ def simulate_group_stage(
     }
 
 
-class _ScoreSampler:
-    def __init__(
-        self,
-        lambda_home: float,
-        lambda_away: float,
-        *,
-        max_goals: int = 10,
-        total_dispersion_tilt: float = 0.0,
-        btts_correlation_tilt: float = 0.0,
-    ) -> None:
-        thresholds = []
-        scorelines = []
-        running = 0.0
-        grid = ScoreGrid(
-            lambda_home,
-            lambda_away,
-            max_goals=max_goals,
-            total_dispersion_tilt=total_dispersion_tilt,
-            btts_correlation_tilt=btts_correlation_tilt,
-        )
-        for home_goals, away_goals, probability in grid.score_probabilities():
-            running += probability
-            thresholds.append(running)
-            scorelines.append((home_goals, away_goals))
-        self._thresholds = thresholds
-        self._scorelines = scorelines
-
-    def sample(self, rng: random.Random) -> tuple[int, int]:
-        index = bisect_left(self._thresholds, rng.random())
-        if index >= len(self._scorelines):
-            index = len(self._scorelines) - 1
-        return self._scorelines[index]
-
-
 def _initial_team_stats(matches: list[dict[str, str]]) -> dict[str, TeamSimulationStats]:
     stats = {}
     for match in matches:
@@ -248,36 +199,6 @@ def _initial_team_stats(matches: list[dict[str, str]]) -> dict[str, TeamSimulati
     return stats
 
 
-def _initial_table(
-    matches: list[dict[str, str]],
-    rng: random.Random,
-) -> dict[tuple[str, str], TeamTableRow]:
-    table: dict[tuple[str, str], TeamTableRow] = {}
-    for match in matches:
-        for key in ("team_home", "team_away"):
-            team = match[key]
-            group = match["group"]
-            table.setdefault(
-                (group, team),
-                TeamTableRow(team=team, group=group, random_tiebreaker=rng.random()),
-            )
-    return table
-
-
-def _apply_match(home: TeamTableRow, away: TeamTableRow, home_goals: int, away_goals: int) -> None:
-    home.gf += home_goals
-    home.ga += away_goals
-    away.gf += away_goals
-    away.ga += home_goals
-    if home_goals > away_goals:
-        home.points += 3
-    elif away_goals > home_goals:
-        away.points += 3
-    else:
-        home.points += 1
-        away.points += 1
-
-
 def _match_points(home_goals: int, away_goals: int) -> tuple[int, int]:
     if home_goals > away_goals:
         return 3, 0
@@ -286,18 +207,14 @@ def _match_points(home_goals: int, away_goals: int) -> tuple[int, int]:
     return 1, 1
 
 
-def _table_sort_key(row: TeamTableRow) -> tuple[int, int, int, float]:
-    return row.points, row.gd, row.gf, row.random_tiebreaker
-
-
 def _group_goal_rows(group_goal_values: dict[str, list[int]]) -> list[dict[str, str]]:
     return [
         {
             "group": group,
-            "expected_goals": _fmt(sum(values) / len(values)),
-            "p05": _fmt(_percentile(values, 0.05)),
-            "p50": _fmt(_percentile(values, 0.50)),
-            "p95": _fmt(_percentile(values, 0.95)),
+            "expected_goals": fmt(sum(values) / len(values)),
+            "p05": fmt(_percentile(values, 0.05)),
+            "p50": fmt(_percentile(values, 0.50)),
+            "p95": fmt(_percentile(values, 0.95)),
         }
         for group, values in sorted(group_goal_values.items())
     ]
@@ -315,14 +232,14 @@ def _team_group_rows(
             {
                 "team": stat.team,
                 "group": stat.group,
-                "expected_points": _fmt(stat.points_total / simulations),
-                "expected_gf": _fmt(expected_gf),
-                "expected_ga": _fmt(expected_ga),
-                "expected_gd": _fmt(expected_gf - expected_ga),
-                "prob_top_group": _fmt(stat.top_group_count / simulations),
-                "prob_l32": _fmt(stat.l32_count / simulations),
-                "prob_third_place": _fmt(stat.third_place_count / simulations),
-                "prob_best_third": _fmt(stat.best_third_count / simulations),
+                "expected_points": fmt(stat.points_total / simulations),
+                "expected_gf": fmt(expected_gf),
+                "expected_ga": fmt(expected_ga),
+                "expected_gd": fmt(expected_gf - expected_ga),
+                "prob_top_group": fmt(stat.top_group_count / simulations),
+                "prob_l32": fmt(stat.l32_count / simulations),
+                "prob_third_place": fmt(stat.third_place_count / simulations),
+                "prob_best_third": fmt(stat.best_third_count / simulations),
             }
         )
     return rows
@@ -341,8 +258,8 @@ def _stadium_rows(
             {
                 "stadium_fifa": stadium,
                 "scheduled_group_matches": str(scheduled_matches),
-                "expected_total_goals": _fmt(expected_total),
-                "expected_average_goals": _fmt(expected_total / scheduled_matches),
+                "expected_total_goals": fmt(expected_total),
+                "expected_average_goals": fmt(expected_total / scheduled_matches),
             }
         )
     return sorted(rows, key=lambda row: (-float(row["expected_average_goals"]), row["stadium_fifa"]))
@@ -364,12 +281,12 @@ def _opta_calibration_rows(
         rows.append(
             {
                 "team": row["team"],
-                "model_prob_top_group": _fmt(model_top),
-                "opta_top_group": _fmt(opta_top),
-                "diff_top_group": _fmt(model_top - opta_top),
-                "model_prob_l32": _fmt(model_l32),
-                "opta_l32": _fmt(opta_l32),
-                "diff_l32": _fmt(model_l32 - opta_l32),
+                "model_prob_top_group": fmt(model_top),
+                "opta_top_group": fmt(opta_top),
+                "diff_top_group": fmt(model_top - opta_top),
+                "model_prob_l32": fmt(model_l32),
+                "opta_l32": fmt(opta_l32),
+                "diff_l32": fmt(model_l32 - opta_l32),
             }
         )
     return rows
@@ -393,12 +310,12 @@ def _opta_standings_calibration_rows(
             {
                 "team": row["team"],
                 "group": row["group"],
-                "model_expected_points": _fmt(model_xpts),
-                "opta_xpts": _fmt(opta_xpts),
-                "diff_xpts": _fmt(model_xpts - opta_xpts),
-                "model_prob_l32": _fmt(model_l32),
-                "opta_qual": _fmt(opta_qual),
-                "diff_qual": _fmt(model_l32 - opta_qual),
+                "model_expected_points": fmt(model_xpts),
+                "opta_xpts": fmt(opta_xpts),
+                "diff_xpts": fmt(model_xpts - opta_xpts),
+                "model_prob_l32": fmt(model_l32),
+                "opta_qual": fmt(opta_qual),
+                "diff_qual": fmt(model_l32 - opta_qual),
                 "model_prob_third_place": row["prob_third_place"],
                 "model_prob_best_third": row["prob_best_third"],
             }
@@ -437,19 +354,3 @@ def _percentile(values: list[int], quantile: float) -> float:
     ordered = sorted(values)
     index = int(round((len(ordered) - 1) * quantile))
     return float(ordered[index])
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _fmt(value: float) -> str:
-    return f"{value:.6f}"

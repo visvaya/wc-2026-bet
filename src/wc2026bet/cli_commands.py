@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from wc2026bet.bridge import train_rating_goal_bridge
+from wc2026bet.csv_io import read_csv
 from wc2026bet.decision_report import build_decision_report
 from wc2026bet.fitting import fit_group_match_params
 from wc2026bet.group_simulation import simulate_group_stage
@@ -457,27 +457,22 @@ def _processed_checks(processed: Path) -> dict[str, bool]:
     )
     checks.update({f"processed_{filename}": (processed / filename).exists() for filename in expected})
     if (processed / "odds.csv").exists():
-        checks["processed_odds_rows"] = len(_read_csv(processed / "odds.csv")) == 792
+        checks["processed_odds_rows"] = len(read_csv(processed / "odds.csv")) == 792
     if (processed / "opta_predictions.csv").exists():
-        checks["processed_opta_predictions_rows"] = len(_read_csv(processed / "opta_predictions.csv")) == 48
+        checks["processed_opta_predictions_rows"] = len(read_csv(processed / "opta_predictions.csv")) == 48
     if (processed / "opta_standings.csv").exists():
-        rows = _read_csv(processed / "opta_standings.csv")
+        rows = read_csv(processed / "opta_standings.csv")
         checks["processed_opta_standings_rows"] = len(rows) == 60
         checks["processed_opta_standings_group_rows"] = sum(row["table_type"] == "group" for row in rows) == 48
         checks["processed_opta_standings_third_rows"] = (
             sum(row["table_type"] == "third_place_snapshot" for row in rows) == 12
         )
     if (processed / "match_score_params.csv").exists():
-        checks["processed_match_score_params_rows"] = len(_read_csv(processed / "match_score_params.csv")) == 72
+        checks["processed_match_score_params_rows"] = len(read_csv(processed / "match_score_params.csv")) == 72
     if (processed / "score_model_config.csv").exists():
-        checks["processed_score_model_config_rows"] = len(_read_csv(processed / "score_model_config.csv")) == 1
+        checks["processed_score_model_config_rows"] = len(read_csv(processed / "score_model_config.csv")) == 1
     if (processed / "team_goal_strengths.csv").exists():
-        checks["processed_team_goal_strengths_rows"] = len(_read_csv(processed / "team_goal_strengths.csv")) == 48
+        checks["processed_team_goal_strengths_rows"] = len(read_csv(processed / "team_goal_strengths.csv")) == 48
     if (processed / "rating_goal_bridge.csv").exists():
-        checks["processed_rating_goal_bridge_rows"] = len(_read_csv(processed / "rating_goal_bridge.csv")) == 1
+        checks["processed_rating_goal_bridge_rows"] = len(read_csv(processed / "rating_goal_bridge.csv")) == 1
     return checks
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))

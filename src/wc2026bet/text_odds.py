@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import re
 import unicodedata
 from collections import defaultdict
@@ -10,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from wc2026bet.constants import TEAM_RATING_ALIASES
+from wc2026bet.csv_io import read_csv, write_csv
 from wc2026bet.manual_odds import ODDS_FIELDS, REQUIRED_MARKET_SELECTIONS
 from wc2026bet.models import Match
 from wc2026bet.parsers import parse_base_matches
@@ -136,11 +136,7 @@ def write_text_odds_review(
         market,
         expected_matches=expected_matches,
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=TEXT_ODDS_REVIEW_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(output_path, TEXT_ODDS_REVIEW_FIELDS, rows)
     return len(rows)
 
 
@@ -166,7 +162,7 @@ def promote_text_odds(
     seen_keys: set[tuple[str, str, str]] = set()
 
     for market, path in expected_files.items():
-        rows = _read_csv(path)
+        rows = read_csv(path)
         market_rows, audit_row = _validate_text_market_rows(
             market,
             path,
@@ -178,8 +174,8 @@ def promote_text_odds(
         canonical_rows.extend(market_rows)
         audit_rows.append(audit_row)
 
-    _write_csv(output_path, ODDS_FIELDS, canonical_rows)
-    _write_csv(audit_output, TEXT_ODDS_AUDIT_FIELDS, audit_rows)
+    write_csv(output_path, ODDS_FIELDS, canonical_rows)
+    write_csv(audit_output, TEXT_ODDS_AUDIT_FIELDS, audit_rows)
     return len(canonical_rows)
 
 
@@ -429,19 +425,6 @@ def _canonical_odds_row(row: dict[str, str]) -> dict[str, str]:
         "ocr_confidence": row["ocr_confidence"],
         "manual_override": "true" if row["manual_override"].lower() != "false" else "false",
     }
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def _mtime_iso(path: Path) -> str:

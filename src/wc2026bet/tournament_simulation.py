@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import csv
 import math
 import random
 import re
-from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
 from wc2026bet.bridge import RatingGoalBridge, load_rating_goal_bridge
+from wc2026bet.csv_io import fmt, read_csv, write_csv
 from wc2026bet.fitting import read_score_model_config
+from wc2026bet.group_table import ScoreSampler, TeamTableRow, apply_match, initial_table, table_sort_key
 from wc2026bet.regulations import parse_r32_third_place_mapping
-from wc2026bet.score_grid import ScoreGrid
 from wc2026bet.tournament_report import (
     STADIUM_AVERAGE_FIELDS,
     STADIUM_TOTAL_FIELDS,
@@ -22,32 +21,16 @@ from wc2026bet.tournament_report import (
     TeamTournamentStats,
     compute_effective_sample_size,
     count_scheduled_stadium_matches,
-    fmt,
     record_stadium_iteration,
     stadium_average_rows,
     stadium_total_rows,
     team_tournament_rows,
-    write_csv,
 )
 
 WINNER_RE = re.compile(r"^Group ([A-L]) winners$")
 RUNNER_UP_RE = re.compile(r"^Group ([A-L]) runners(?:-up| up)$")
 THIRD_PLACE_RE = re.compile(r"^Group [A-L/]+ third place$")
 MATCH_RESULT_RE = re.compile(r"^(Winner|Runner-up) match (\d+)$")
-
-
-@dataclass
-class TeamTableRow:
-    team: str
-    group: str
-    points: int = 0
-    gf: int = 0
-    ga: int = 0
-    random_tiebreaker: float = 0.0
-
-    @property
-    def gd(self) -> int:
-        return self.gf - self.ga
 
 
 @dataclass(frozen=True)
@@ -104,10 +87,10 @@ def simulate_tournament(
     if calibration_model not in {"none", "opta_reweight"}:
         raise ValueError("calibration_model must be none or opta_reweight")
 
-    matches = _read_csv(processed_dir / "matches.csv")
+    matches = read_csv(processed_dir / "matches.csv")
     group_matches = [row for row in matches if row["is_group_stage"] == "true"]
     knockout_matches = [row for row in matches if row["is_group_stage"] != "true"]
-    params = {row["match_id"]: row for row in _read_csv(processed_dir / "match_score_params.csv")}
+    params = {row["match_id"]: row for row in read_csv(processed_dir / "match_score_params.csv")}
     bridge = load_rating_goal_bridge(processed_dir)
     score_config = read_score_model_config(processed_dir / "score_model_config.csv")
     total_dispersion_tilt = score_config.total_dispersion_tilt if use_score_tilts else 0.0
@@ -117,7 +100,7 @@ def simulate_tournament(
         for row in parse_r32_third_place_mapping(manual_dir / "r32_third_place_mapping.csv")
     }
     stadium_market_odds = {
-        row["stadium_fifa"]: float(row["decimal_odds"]) for row in _read_csv(processed_dir / "stadium_market_odds.csv")
+        row["stadium_fifa"]: float(row["decimal_odds"]) for row in read_csv(processed_dir / "stadium_market_odds.csv")
     }
     calibration_config = CalibrationConfig(model=calibration_model, strength=opta_strength)
     calibration_targets = _load_calibration_targets(
@@ -133,7 +116,7 @@ def simulate_tournament(
 
     rng = random.Random(seed)  # noqa: S311 - seedable Monte Carlo sampling, not cryptography
     group_samplers = {
-        match["match_id"]: _ScoreSampler(
+        match["match_id"]: ScoreSampler(
             float(params[match["match_id"]]["lambda_home"]),
             float(params[match["match_id"]]["lambda_away"]),
             max_goals=score_config.max_goals,
@@ -142,7 +125,7 @@ def simulate_tournament(
         )
         for match in group_matches
     }
-    knockout_sampler_cache: dict[tuple[float, float, float], _ScoreSampler] = {}
+    knockout_sampler_cache: dict[tuple[float, float, float], ScoreSampler] = {}
     team_stats = {team: TeamTournamentStats(team=team) for team in bridge.ratings}
     stadium_average_values: dict[str, list[tuple[float, float]]] = {
         stadium: [] for stadium in scheduled_stadium_matches
@@ -155,7 +138,7 @@ def simulate_tournament(
     clipped_high = 0
 
     for _ in range(simulations):
-        table = _initial_table(group_matches, rng)
+        table = initial_table(group_matches, rng)
         stadium_goals: dict[str, int] = defaultdict(int)
         iteration_stats = {team: TeamIterationStats() for team in bridge.ratings}
 
@@ -163,13 +146,13 @@ def simulate_tournament(
             home_goals, away_goals = group_samplers[match["match_id"]].sample(rng)
             home = match["team_home"]
             away = match["team_away"]
-            _apply_table_match(table[(match["group"], home)], table[(match["group"], away)], home_goals, away_goals)
+            apply_match(table[(match["group"], home)], table[(match["group"], away)], home_goals, away_goals)
             _add_iteration_goals(iteration_stats, home, away, home_goals, away_goals)
             stadium_goals[match["stadium_fifa"]] += home_goals + away_goals
 
         group_rankings = _rank_groups(table)
         third_rows = [ranking[2] for ranking in group_rankings.values()]
-        best_thirds = sorted(third_rows, key=_table_sort_key, reverse=True)[:8]
+        best_thirds = sorted(third_rows, key=table_sort_key, reverse=True)[:8]
         best_third_groups = "".join(sorted(row.group for row in best_thirds))
         if best_third_groups not in r32_mapping:
             raise ValueError(f"Missing R32 mapping for third-place groups: {best_third_groups}")
@@ -277,46 +260,12 @@ def simulate_tournament(
     }
 
 
-class _ScoreSampler:
-    def __init__(
-        self,
-        lambda_home: float,
-        lambda_away: float,
-        *,
-        max_goals: int,
-        total_dispersion_tilt: float,
-        btts_correlation_tilt: float,
-    ) -> None:
-        thresholds = []
-        scorelines = []
-        running = 0.0
-        grid = ScoreGrid(
-            lambda_home,
-            lambda_away,
-            max_goals=max_goals,
-            total_dispersion_tilt=total_dispersion_tilt,
-            btts_correlation_tilt=btts_correlation_tilt,
-        )
-        for home_goals, away_goals, probability in grid.score_probabilities():
-            running += probability
-            thresholds.append(running)
-            scorelines.append((home_goals, away_goals))
-        self._thresholds = thresholds
-        self._scorelines = scorelines
-
-    def sample(self, rng: random.Random) -> tuple[int, int]:
-        index = bisect_left(self._thresholds, rng.random())
-        if index >= len(self._scorelines):
-            index = len(self._scorelines) - 1
-        return self._scorelines[index]
-
-
 def _simulate_knockout_match(
     home: str,
     away: str,
     bridge: RatingGoalBridge,
     rng: random.Random,
-    sampler_cache: dict[tuple[float, float, float], _ScoreSampler],
+    sampler_cache: dict[tuple[float, float, float], ScoreSampler],
     max_goals: int,
     total_dispersion_tilt: float,
     btts_correlation_tilt: float,
@@ -386,8 +335,8 @@ def _load_calibration_targets(
         return {}
     if baseline_probabilities_path is None:
         raise ValueError("baseline_probabilities_path is required for opta_reweight")
-    opta = {row["team"]: row for row in _read_csv(processed_dir / "opta_predictions.csv")}
-    baseline = {row["team"]: row for row in _read_csv(baseline_probabilities_path)}
+    opta = {row["team"]: row for row in read_csv(processed_dir / "opta_predictions.csv")}
+    baseline = {row["team"]: row for row in read_csv(baseline_probabilities_path)}
     targets = {}
     for team, opta_row in opta.items():
         if team not in baseline:
@@ -443,17 +392,17 @@ def _clip_probability(value: float) -> float:
 
 
 def _sampler(
-    cache: dict[tuple[float, float, float], _ScoreSampler],
+    cache: dict[tuple[float, float, float], ScoreSampler],
     lambda_home: float,
     lambda_away: float,
     multiplier: float,
     max_goals: int,
     total_dispersion_tilt: float,
     btts_correlation_tilt: float,
-) -> _ScoreSampler:
+) -> ScoreSampler:
     key = (round(lambda_home, 3), round(lambda_away, 3), round(multiplier, 3))
     if key not in cache:
-        cache[key] = _ScoreSampler(
+        cache[key] = ScoreSampler(
             max(0.01, lambda_home * multiplier),
             max(0.01, lambda_away * multiplier),
             max_goals=max_goals,
@@ -496,47 +445,16 @@ def _winner_group_for_third_place_slot(match: dict[str, str]) -> str:
     raise ValueError(f"Cannot infer R32 winner group for match {match['match_id']}")
 
 
-def _initial_table(matches: list[dict[str, str]], rng: random.Random) -> dict[tuple[str, str], TeamTableRow]:
-    table: dict[tuple[str, str], TeamTableRow] = {}
-    for match in matches:
-        for key in ("team_home", "team_away"):
-            team = match[key]
-            group = match["group"]
-            table.setdefault(
-                (group, team),
-                TeamTableRow(team=team, group=group, random_tiebreaker=rng.random()),
-            )
-    return table
-
-
 def _rank_groups(table: dict[tuple[str, str], TeamTableRow]) -> dict[str, list[TeamTableRow]]:
     groups = sorted({group for group, _ in table})
     return {
         group: sorted(
             [row for (row_group, _), row in table.items() if row_group == group],
-            key=_table_sort_key,
+            key=table_sort_key,
             reverse=True,
         )
         for group in groups
     }
-
-
-def _apply_table_match(home: TeamTableRow, away: TeamTableRow, home_goals: int, away_goals: int) -> None:
-    home.gf += home_goals
-    home.ga += away_goals
-    away.gf += away_goals
-    away.ga += home_goals
-    if home_goals > away_goals:
-        home.points += 3
-    elif away_goals > home_goals:
-        away.points += 3
-    else:
-        home.points += 1
-        away.points += 1
-
-
-def _table_sort_key(row: TeamTableRow) -> tuple[int, int, int, float]:
-    return row.points, row.gd, row.gf, row.random_tiebreaker
 
 
 def _add_iteration_goals(
@@ -602,8 +520,3 @@ def _write_summary(
         penalty_model=penalty_model,
         value_threshold=value_threshold,
     )
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))

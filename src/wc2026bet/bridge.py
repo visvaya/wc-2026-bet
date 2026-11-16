@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import csv
 import math
 from dataclasses import dataclass
 from pathlib import Path
+
+from wc2026bet.csv_io import read_csv, write_csv
 
 TEAM_GOAL_STRENGTH_FIELDS = ("team", "rating", "attack", "defense")
 RATING_GOAL_BRIDGE_FIELDS = (
@@ -71,11 +72,11 @@ class _Observation:
 def train_rating_goal_bridge(processed_dir: Path) -> RatingGoalBridge:
     """Train and write a ridge-regularized rating-to-goals bridge."""
 
-    teams = _read_csv(processed_dir / "teams.csv")
+    teams = read_csv(processed_dir / "teams.csv")
     matches = {
-        row["match_id"]: row for row in _read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"
+        row["match_id"]: row for row in read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"
     }
-    params = {row["match_id"]: row for row in _read_csv(processed_dir / "match_score_params.csv")}
+    params = {row["match_id"]: row for row in read_csv(processed_dir / "match_score_params.csv")}
     ratings = {row["team"]: float(row["rating"]) for row in teams}
     team_names = sorted(ratings)
     observations = _training_observations(matches, params, ratings)
@@ -106,15 +107,15 @@ def write_rating_goal_bridge(bridge: RatingGoalBridge, processed_dir: Path) -> N
             "observations": str(bridge.observations),
         }
     ]
-    _write_csv(processed_dir / "team_goal_strengths.csv", TEAM_GOAL_STRENGTH_FIELDS, strength_rows)
-    _write_csv(processed_dir / "rating_goal_bridge.csv", RATING_GOAL_BRIDGE_FIELDS, model_rows)
+    write_csv(processed_dir / "team_goal_strengths.csv", TEAM_GOAL_STRENGTH_FIELDS, strength_rows)
+    write_csv(processed_dir / "rating_goal_bridge.csv", RATING_GOAL_BRIDGE_FIELDS, model_rows)
 
 
 def load_rating_goal_bridge(processed_dir: Path) -> RatingGoalBridge:
     """Load trained bridge coefficients from processed CSV files."""
 
-    strengths = _read_csv(processed_dir / "team_goal_strengths.csv")
-    model_rows = _read_csv(processed_dir / "rating_goal_bridge.csv")
+    strengths = read_csv(processed_dir / "team_goal_strengths.csv")
+    model_rows = read_csv(processed_dir / "rating_goal_bridge.csv")
     if len(model_rows) != 1:
         raise ValueError("rating_goal_bridge.csv must contain exactly one row")
     model = model_rows[0]
@@ -318,16 +319,3 @@ def _gaussian_solve(matrix: list[list[float]], vector: list[float]) -> list[floa
             for index in range(column, size + 1):
                 augmented[row][index] -= factor * augmented[column][index]
     return [augmented[row][size] for row in range(size)]
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)

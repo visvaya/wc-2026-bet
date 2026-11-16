@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 from collections import defaultdict
 from pathlib import Path
 
+from wc2026bet.csv_io import fmt, read_csv, write_csv
 from wc2026bet.fitting import read_score_model_config
 from wc2026bet.score_grid import ScoreGrid
 
@@ -23,9 +23,9 @@ def build_group_stage_reports(processed_dir: Path, output_dir: Path) -> dict[str
     """Write group-stage goal aggregates using fitted lambdas."""
 
     matches = {
-        row["match_id"]: row for row in _read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"
+        row["match_id"]: row for row in read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"
     }
-    params = {row["match_id"]: row for row in _read_csv(processed_dir / "match_score_params.csv")}
+    params = {row["match_id"]: row for row in read_csv(processed_dir / "match_score_params.csv")}
     score_config = read_score_model_config(processed_dir / "score_model_config.csv")
     missing = sorted(set(matches) - set(params), key=int)
     if missing:
@@ -78,7 +78,7 @@ def build_group_stage_reports(processed_dir: Path, output_dir: Path) -> dict[str
     group_rows = [
         {
             "group": group,
-            "expected_goals": _fmt(total),
+            "expected_goals": fmt(total),
             "p05": "",
             "p50": "",
             "p95": "",
@@ -89,10 +89,10 @@ def build_group_stage_reports(processed_dir: Path, output_dir: Path) -> dict[str
         {
             "team": str(row["team"]),
             "group": str(row["group"]),
-            "expected_points": _fmt(float(row["expected_points"])),
-            "expected_gf": _fmt(float(row["expected_gf"])),
-            "expected_ga": _fmt(float(row["expected_ga"])),
-            "expected_gd": _fmt(float(row["expected_gf"]) - float(row["expected_ga"])),
+            "expected_points": fmt(float(row["expected_points"])),
+            "expected_gf": fmt(float(row["expected_gf"])),
+            "expected_ga": fmt(float(row["expected_ga"])),
+            "expected_gd": fmt(float(row["expected_gf"]) - float(row["expected_ga"])),
         }
         for row in sorted(team_rows.values(), key=lambda item: (str(item["group"]), str(item["team"])))
     ]
@@ -100,8 +100,8 @@ def build_group_stage_reports(processed_dir: Path, output_dir: Path) -> dict[str
         {
             "stadium_fifa": stadium,
             "scheduled_group_matches": str(stadium_counts[stadium]),
-            "expected_total_goals": _fmt(total),
-            "expected_average_goals": _fmt(total / stadium_counts[stadium]),
+            "expected_total_goals": fmt(total),
+            "expected_average_goals": fmt(total / stadium_counts[stadium]),
         }
         for stadium, total in sorted(
             stadium_totals.items(),
@@ -109,9 +109,9 @@ def build_group_stage_reports(processed_dir: Path, output_dir: Path) -> dict[str
         )
     ]
 
-    _write_csv(output_dir / "group-goals.csv", GROUP_GOALS_FIELDS, group_rows)
-    _write_csv(output_dir / "team-group.csv", TEAM_GROUP_FIELDS, team_output_rows)
-    _write_csv(output_dir / "stadium-group-ranking.csv", STADIUM_GROUP_FIELDS, stadium_rows)
+    write_csv(output_dir / "group-goals.csv", GROUP_GOALS_FIELDS, group_rows)
+    write_csv(output_dir / "team-group.csv", TEAM_GROUP_FIELDS, team_output_rows)
+    write_csv(output_dir / "stadium-group-ranking.csv", STADIUM_GROUP_FIELDS, stadium_rows)
     return {
         "group_goals": len(group_rows),
         "team_group": len(team_output_rows),
@@ -139,19 +139,3 @@ def _add_team_projection(
     rows[key]["expected_points"] = float(rows[key]["expected_points"]) + expected_points
     rows[key]["expected_gf"] = float(rows[key]["expected_gf"]) + goals_for
     rows[key]["expected_ga"] = float(rows[key]["expected_ga"]) + goals_against
-
-
-def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_csv(path: Path, fieldnames: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _fmt(value: float) -> str:
-    return f"{value:.6f}"
