@@ -105,3 +105,6 @@ ignore_names = ["pytest_configure", "pytest_collection_modifyitems"]
 # Dependabot cooldown. For an urgent security fix newer than that, add a per-package override
 # with `exclude-newer-package` instead of dropping this setting.
 exclude-newer = "7 days"
+# The uv version CI pins (setup-uv in ci.yml and security.yml) is the floor, so an older local uv
+# fails with a clear message instead of resolving or writing uv.lock differently. Raise it with CI.
+required-version = ">=0.13.7"
