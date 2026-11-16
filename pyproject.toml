@@ -27,6 +27,7 @@ testpaths = ["tests"]
 addopts = ["-p", "no:cacheprovider"]
 markers = [
     "real_data: needs the real snapshots; runs only when WC2026BET_DATA_DIR names a directory with base-data/ and data/manual/",
+    "slow: takes about a second or more (simulations, PDF extraction, OCR, git subprocesses); deselect with -m 'not slow'",
 ]
 
 [tool.coverage.run]

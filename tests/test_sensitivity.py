@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from synthetic_data import write_score_config, write_score_params
 from wc2026bet.bridge import train_rating_goal_bridge
 from wc2026bet.csv_io import read_csv
@@ -7,6 +9,7 @@ from wc2026bet.processed import build_processed_data
 from wc2026bet.sensitivity import run_sensitivity
 
 
+@pytest.mark.slow
 def test_run_sensitivity_writes_scenario_outputs_and_aggregate(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:

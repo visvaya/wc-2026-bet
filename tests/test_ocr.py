@@ -154,6 +154,7 @@ def test_match_row_text_to_match_does_not_use_schedule_index_order(real_base_dat
     assert [result.match.match_id for result in results] == [67, 68, 71, 72, 70, 69]
 
 
+@pytest.mark.slow
 def test_write_odds_ocr_outputs_generates_raw_review_and_crops(tmp_path: Path, synthetic_base_data: Path) -> None:
     work_dir = tmp_path
     source_path = work_dir / "market.png"

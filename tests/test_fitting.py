@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from synthetic_data import odds_for, write_rows
 from wc2026bet.csv_io import read_csv
 from wc2026bet.fitting import fit_group_match_params, fit_match_from_market_odds, read_score_model_config
@@ -23,6 +25,7 @@ def test_fit_match_from_market_odds_recovers_reasonable_lambdas() -> None:
     assert 0.0 < result.bridge_weight <= 1.0
 
 
+@pytest.mark.slow
 def test_fit_group_match_params_writes_one_row_per_group_match(tmp_path: Path, synthetic_base_data: Path) -> None:
     work_dir = tmp_path
     manual_dir = work_dir / "manual"

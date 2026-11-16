@@ -192,6 +192,7 @@ def _repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, user: str, emai
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.mark.slow
 def test_pre_commit_reads_the_owner_identities_of_the_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _repository(tmp_path, monkeypatch, "Jane Doe", "jane@example.com")
     assert hooks.pre_commit() == []
@@ -202,6 +203,7 @@ def test_pre_commit_reads_the_owner_identities_of_the_checkout(tmp_path: Path, m
     ]
 
 
+@pytest.mark.slow
 def test_pre_commit_runs_ruff_on_the_staged_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _repository(tmp_path, monkeypatch, "Jane Doe", "jane@example.com")
     # Own ruff settings: the repository's pyproject.toml excludes `.test-artifacts`, where tmp_path lives.
