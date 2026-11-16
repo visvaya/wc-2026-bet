@@ -38,5 +38,5 @@ New model behaviour comes with a test written first. The model specification and
 
 - Pull requests are merged by squash, so the pull request title becomes the commit on `main`. It must be a [Conventional Commit](https://www.conventionalcommits.org/): `<type>(<scope>): <subject>`, with type one of `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`, a subject of at most 72 characters and no trailing period. CI checks the title.
 - Fill in the pull request template: what changes, the checks you ran, and the checks you skipped with the reason.
-- [CodeRabbit](https://www.coderabbit.ai/) reviews pull requests into `main` automatically once they are ready for review (not drafts); its comments are suggestions, and the maintainer decides which to apply.
+- [CodeRabbit](https://www.coderabbit.ai/) reviews a pull request when the maintainer asks for it (the comment `@coderabbitai review`), usually for changes to data parsing, CI or larger logic changes; its comments are suggestions, and the maintainer decides which to apply.
 - The maintainer reviews every pull request, and CI must be green before it is merged.
