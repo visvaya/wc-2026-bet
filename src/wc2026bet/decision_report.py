@@ -310,8 +310,10 @@ def _opta_calibrated_sensitivity_section(
         "## Opta-Calibrated Sensitivity",
         "",
         f"- {verdict}",
-        "- This scenario reweights tournament paths toward Opta advancement probabilities"
-        " without changing goal lambdas.",
+        (
+            "- This scenario reweights tournament paths toward Opta advancement probabilities"
+            " without changing goal lambdas."
+        ),
         "",
         "| Stadium | Baseline P | Opta P | Delta P | Baseline EV | Opta EV |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
