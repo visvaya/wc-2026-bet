@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from synthetic_data import odds_for, write_rows
-from wc2026bet import cli
+from wc2026bet import cli, cli_commands
 from wc2026bet.cli_commands import (
     build_decision_report_command,
     fit_score_params_command,
@@ -203,3 +203,24 @@ def test_run_all_stops_on_first_failed_step(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result == 1
     assert calls == ["build-data", "validate"]
+
+
+def test_run_sensitivity_leaves_the_decision_report_to_its_own_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The report states the simulation settings, which only the tournament run knows.
+    processed, manual, out = tmp_path / "processed", tmp_path / "manual", tmp_path / "outputs"
+    inputs = ("matches", "match_score_params", "stadium_market_odds", "team_goal_strengths", "rating_goal_bridge")
+    for path in [*(processed / f"{name}.csv" for name in inputs), manual / "r32_third_place_mapping.csv"]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n", encoding="utf-8")
+    out.mkdir()
+    (out / "stadium-average-ranking.csv").write_text("x\n", encoding="utf-8")
+    (out / "tournament-summary.md").write_text("- simulations: 123\n", encoding="utf-8")
+    monkeypatch.setattr(cli_commands, "run_sensitivity", lambda *args, **kwargs: {"scenarios": 3})
+
+    result = run_sensitivity_command(processed, manual, out / "sensitivity", 10, 1, 0.05)
+
+    assert result == 0
+    assert (out / "tournament-summary.md").read_text(encoding="utf-8") == "- simulations: 123\n"
+    assert "run build-decision-report" in capsys.readouterr().out
