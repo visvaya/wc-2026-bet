@@ -154,6 +154,24 @@ def test_the_diff_options_report_staged_lines_of_a_real_repository(tmp_path: Pat
     assert problems == ["notes.md:1: em dash (U+2014); use an en dash (U+2013) or a middle dot (U+00B7)"]
 
 
+def test_scan_reports_forbidden_characters_in_tracked_text_files(tmp_path: Path) -> None:
+    hooks.git(["init", "-q"], tmp_path)
+    (tmp_path / "clean.md").write_text("clean\n", encoding="utf-8")
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\x00" + EM_DASH.encode())
+    (tmp_path / "uv.lock").write_text(f"a {EM_DASH} b\n", encoding="utf-8")
+    (tmp_path / "untracked.md").write_text(f"a {EM_DASH} b\n", encoding="utf-8")
+    hooks.git(["add", "clean.md", "image.png", "uv.lock"], tmp_path)
+    assert hooks.scan(tmp_path) == []
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "bad.md").write_text(f"first\nsecond {EM_DASH}\nthird {EMOJI}\n", encoding="utf-8")
+    hooks.git(["add", "docs/bad.md"], tmp_path)
+    assert hooks.scan(tmp_path) == [
+        "docs/bad.md:2: em dash (U+2014); use an en dash (U+2013) or a middle dot (U+00B7)",
+        "docs/bad.md:3: emoji",
+    ]
+
+
 def _repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, user: str, email: str) -> None:
     hooks.git(["init", "-q"], tmp_path)
     hooks.git(["config", "user.name", user], tmp_path)
@@ -195,3 +213,14 @@ def test_main_dispatches_and_reports(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert hooks.main(["commit-msg", str(message)]) == 1
     assert hooks.main(["unknown"]) == 1
     assert "usage:" in capsys.readouterr().err
+
+
+def test_main_scan_checks_the_current_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hooks.git(["init", "-q"], tmp_path)
+    (tmp_path / "a.md").write_text(f"a {EM_DASH} b\n", encoding="utf-8")
+    hooks.git(["add", "a.md"], tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert hooks.main(["scan"]) == 1
+    assert "a.md:1: em dash" in capsys.readouterr().err
