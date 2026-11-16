@@ -22,13 +22,13 @@
       "name": "uv (ci.yml)",
       "mechanism": "job",
       "check": { "file": ".github/workflows/ci.yml", "pattern": "[^-]version:[ \"]*([0-9.]+)", "github": "astral-sh/uv" },
-      "howToBump": "update the setup-uv version in ci.yml and security.yml"
+      "howToBump": "update the setup-uv version in ci.yml and security.yml and required-version in pyproject.toml"
     },
     {
       "name": "uv (security.yml)",
       "mechanism": "job",
       "check": { "file": ".github/workflows/security.yml", "pattern": "[^-]version:[ \"]*([0-9.]+)", "github": "astral-sh/uv" },
-      "howToBump": "update the setup-uv version in ci.yml and security.yml"
+      "howToBump": "update the setup-uv version in ci.yml and security.yml and required-version in pyproject.toml"
     },
     {
       "name": "gitleaks",
