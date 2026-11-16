@@ -1,13 +1,16 @@
+from collections.abc import Callable
 from pathlib import Path
+
+import pytest
 
 from wc2026bet import cli
 
 
-def test_run_all_executes_pipeline_in_order(monkeypatch) -> None:
-    calls = []
+def test_run_all_executes_pipeline_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
-    def record(name, return_value=0):
-        def inner(*args, **kwargs):
+    def record(name: str, return_value: int = 0) -> Callable[..., int]:
+        def inner(*args: object, **kwargs: object) -> int:
             calls.append((name, args, kwargs))
             return return_value
 
@@ -65,18 +68,18 @@ def test_run_all_executes_pipeline_in_order(monkeypatch) -> None:
     assert calls[7][1] == (Path("data/processed"), Path("data/manual"), Path("outputs/sensitivity"), 67, 2026, 0.07)
 
 
-def test_run_all_stops_on_first_failed_step(monkeypatch) -> None:
-    calls = []
+def test_run_all_stops_on_first_failed_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
 
-    def passing_step(*args, **kwargs):
+    def passing_step(*args: object, **kwargs: object) -> int:
         calls.append("build-data")
         return 0
 
-    def failing_step(*args, **kwargs):
+    def failing_step(*args: object, **kwargs: object) -> int:
         calls.append("validate")
         return 1
 
-    def unexpected_step(*args, **kwargs):
+    def unexpected_step(*args: object, **kwargs: object) -> int:
         raise AssertionError("run-all should stop after a failed step")
 
     monkeypatch.setattr(cli, "build_data_command", passing_step)

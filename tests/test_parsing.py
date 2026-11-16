@@ -37,7 +37,7 @@ def test_match_parser_detects_expected_tournament_shape(base_data: Path) -> None
 @pytest.mark.real_data
 def test_match_parser_keeps_market_relevant_stadium_counts(real_base_data: Path) -> None:
     matches = parse_base_matches(real_base_data)
-    stadium_counts = {}
+    stadium_counts: dict[str, int] = {}
     for match in matches:
         stadium_counts[match.stadium] = stadium_counts.get(match.stadium, 0) + 1
 
@@ -181,9 +181,11 @@ def test_real_opta_standings_keep_snapshot_values_and_aliases(real_base_data: Pa
     # Independent read: position line, team line, stats line ending in xPTS and QUAL%.
     raw = re.findall(r"^(\d+)\s*\nteam logo(.+)\n.*\s(\S+)\s+(\S+)%$", _read(path), re.M)
 
-    assert [(row.raw_pos, row.source_team, row.xpts, row.qual) for row in rows] == [
+    # pytest.approx entries compare equal to floats, which mypy cannot see in the element types.
+    expected: list[tuple[object, ...]] = [
         (int(pos), team, pytest.approx(float(xpts)), pytest.approx(float(qual) / 100)) for pos, team, xpts, qual in raw
     ]
+    assert [(row.raw_pos, row.source_team, row.xpts, row.qual) for row in rows] == expected
     group_rows = [row for row in rows if row.table_type == "group"]
     # 32 of the 48 teams reach the round of 32, so the QUAL column sums to 32 up to rounding.
     assert sum(row.qual for row in group_rows) == pytest.approx(32, abs=0.05)

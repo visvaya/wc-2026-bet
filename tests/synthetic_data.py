@@ -12,9 +12,10 @@ import itertools
 import random
 from pathlib import Path
 
-import pymupdf
+import fitz  # PyMuPDF; the src modules use the same untyped name
 
 from wc2026bet.constants import BOOKMAKER_STADIUM_ALIASES, FIFA_STADIUMS
+from wc2026bet.csv_io import read_csv, write_csv
 from wc2026bet.regulations import R32_MAPPING_FIELDS, SLOT_FIELDS
 
 SEED = 20260101
@@ -132,7 +133,7 @@ def write_annex_c_pdf(path: Path, rows: list[dict[str, str]]) -> None:
     """Write a text page, then the mapping rows as ruled tables (option column, then one column per slot)."""
 
     cell_width, row_height, left, top, rows_per_page = 50, 13, 40, 40, 55
-    doc = pymupdf.open()
+    doc = fitz.open()
     doc.new_page().insert_text((left, top), "Synthetic regulations without mapping rows")
     for start in range(0, len(rows), rows_per_page):
         table = [["Option", *(field.removeprefix("vs_") for field in SLOT_FIELDS)]]
@@ -152,6 +153,59 @@ def write_annex_c_pdf(path: Path, rows: list[dict[str, str]]) -> None:
         shape.finish(color=(0, 0, 0), width=0.5)
         shape.commit()
     doc.save(path)
+
+
+def write_rows(path: Path, rows: list[dict[str, str]]) -> None:
+    write_csv(path, list(rows[0]), rows)
+
+
+def odds_for(market: str, selection: str) -> str:
+    """Decimal odds for one selection of the filled-in group odds template."""
+
+    if market == "1X2":
+        return {"home": "2.10", "draw": "3.40", "away": "3.90"}[selection]
+    if market == "btts":
+        return {"yes": "1.95", "no": "1.95"}[selection]
+    return {
+        "over_under_0_5": {"over": "1.07", "under": "8.80"},
+        "over_under_1_5": {"over": "1.38", "under": "3.05"},
+        "over_under_2_5": {"over": "2.15", "under": "1.72"},
+    }[market][selection]
+
+
+def write_score_params(processed_dir: Path) -> None:
+    """The same score parameters for every group match, in place of the fitting stage."""
+
+    matches = [row for row in read_csv(processed_dir / "matches.csv") if row["is_group_stage"] == "true"]
+    rows = [
+        {
+            "match_id": row["match_id"],
+            "lambda_home": "1.4",
+            "lambda_away": "1.1",
+            "weighted_rmse": "0.1",
+            "max_abs_error": "0.05",
+            "low_confidence": "false",
+            "bridge_weight": "1.0",
+        }
+        for row in matches
+    ]
+    write_rows(processed_dir / "match_score_params.csv", rows)
+
+
+def write_score_config(processed_dir: Path) -> None:
+    """A plain score-grid configuration (no dispersion or BTTS tilt), in place of the fitting stage."""
+
+    rows = [
+        {
+            "max_goals": "10",
+            "total_dispersion_tilt": "0.000000",
+            "btts_correlation_tilt": "0.000000",
+            "weighted_rmse": "0.100000",
+            "max_abs_error": "0.050000",
+            "unique_market_shapes": "1",
+        }
+    ]
+    write_rows(processed_dir / "score_model_config.csv", rows)
 
 
 def _rng() -> random.Random:

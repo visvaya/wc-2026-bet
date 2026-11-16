@@ -15,7 +15,7 @@ license-files = ["LICENSE"]
 dependencies = ["Pillow>=13.0", "pytesseract>=0.3.13", "PyMuPDF>=1.24"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.14", "mypy>=1.19"]
+dev = ["pytest>=8", "pytest-cov>=6", "ruff>=0.14", "mypy>=1.19", "import-linter==2.15", "vulture==2.16"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -34,9 +34,10 @@ markers = [
 source = ["src/wc2026bet"]
 
 [tool.coverage.report]
-# Calibrated on the CI runner (ubuntu, Python 3.13), not locally: two runs on 2026-09-30 both
-# measured 82.44% (2848 statements, 500 missed); Windows measures about one point higher.
-fail_under = 80
+# A ratchet: it only goes up. Calibrated on the CI runner (ubuntu, Python 3.13), not locally, because
+# Windows measures about one point higher: on 2026-11-16 CI measured 84.09% on main (2697 statements,
+# 429 missed) while Windows measured 85.06% on the same commit.
+fail_under = 84
 show_missing = true
 skip_covered = true
 
@@ -59,7 +60,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "S"]
 [tool.mypy]
 python_version = "3.13"
 mypy_path = "src"
-files = ["src/wc2026bet", "scripts"]
+files = ["src/wc2026bet", "scripts", "tests"]
 strict = true
 warn_unused_ignores = true
 
@@ -67,6 +68,35 @@ warn_unused_ignores = true
 # Third-party packages without type stubs.
 module = ["fitz", "pytesseract"]
 ignore_missing_imports = true
+
+[tool.importlinter]
+# Run from `src` (`lint-imports --config ../pyproject.toml`): at the repository root the `wc2026bet/`
+# shim shadows the package. scripts/gate.py does that.
+root_package = "wc2026bet"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Pure modules do no I/O and depend on no pipeline stage"
+type = "forbidden"
+source_modules = ["wc2026bet.odds", "wc2026bet.score_grid", "wc2026bet.models", "wc2026bet.constants"]
+forbidden_modules = [
+    "csv",
+    "pathlib",
+    "random",
+    "datetime",
+    "time",
+    "os",
+    "io",
+    "shutil",
+    "subprocess",
+    "wc2026bet.*",
+]
+broken_contract_guidance = "Pass the data, clock or random generator in as an argument from the calling stage."
+
+[tool.vulture]
+paths = ["src", "tests", "scripts"]
+# pytest calls these hooks by name.
+ignore_names = ["pytest_configure", "pytest_collection_modifyitems"]
 
 [tool.uv]
 # Release-age protection: resolve only versions published at least a week ago, matching the

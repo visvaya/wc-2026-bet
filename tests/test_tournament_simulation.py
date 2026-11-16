@@ -1,9 +1,10 @@
-import csv
 from pathlib import Path
 
 import pytest
 
+from synthetic_data import write_score_config, write_score_params
 from wc2026bet.bridge import train_rating_goal_bridge
+from wc2026bet.csv_io import read_csv
 from wc2026bet.processed import build_processed_data
 from wc2026bet.tournament_report import compute_effective_sample_size, stadium_average_rows
 from wc2026bet.tournament_simulation import simulate_tournament
@@ -19,8 +20,8 @@ def test_simulate_tournament_writes_stadium_and_team_reports(
     processed_dir = work_dir / "processed"
     output_dir = work_dir / "outputs"
     build_processed_data(synthetic_base_data, processed_dir, synthetic_manual_data)
-    _write_score_params(processed_dir)
-    _write_score_config(processed_dir)
+    write_score_params(processed_dir)
+    write_score_config(processed_dir)
     train_rating_goal_bridge(processed_dir)
 
     counts = simulate_tournament(
@@ -36,9 +37,9 @@ def test_simulate_tournament_writes_stadium_and_team_reports(
         "stadium_total": 16,
         "team_tournament": 48,
     }
-    average_rows = _read_rows(output_dir / "stadium-average-ranking.csv")
-    total_rows = _read_rows(output_dir / "stadium-total-ranking.csv")
-    team_rows = _read_rows(output_dir / "team-tournament.csv")
+    average_rows = read_csv(output_dir / "stadium-average-ranking.csv")
+    total_rows = read_csv(output_dir / "stadium-total-ranking.csv")
+    team_rows = read_csv(output_dir / "team-tournament.csv")
     assert set(average_rows[0]) == {
         "stadium_fifa",
         "scheduled_matches",
@@ -72,8 +73,8 @@ def test_simulate_tournament_is_seed_reproducible(
     output_a = work_dir / "outputs-a"
     output_b = work_dir / "outputs-b"
     build_processed_data(synthetic_base_data, processed_dir, synthetic_manual_data)
-    _write_score_params(processed_dir)
-    _write_score_config(processed_dir)
+    write_score_params(processed_dir)
+    write_score_config(processed_dir)
     train_rating_goal_bridge(processed_dir)
 
     simulate_tournament(processed_dir, synthetic_manual_data, output_a, simulations=25, seed=2026)
@@ -92,8 +93,8 @@ def test_simulate_tournament_supports_opta_reweighting(
     baseline_output = work_dir / "baseline"
     calibrated_output = work_dir / "calibrated"
     build_processed_data(synthetic_base_data, processed_dir, synthetic_manual_data)
-    _write_score_params(processed_dir)
-    _write_score_config(processed_dir)
+    write_score_params(processed_dir)
+    write_score_config(processed_dir)
     train_rating_goal_bridge(processed_dir)
     simulate_tournament(processed_dir, synthetic_manual_data, baseline_output, simulations=30, seed=2026)
 
@@ -107,8 +108,8 @@ def test_simulate_tournament_supports_opta_reweighting(
         baseline_probabilities_path=baseline_output / "team-tournament.csv",
     )
 
-    average_rows = _read_rows(calibrated_output / "stadium-average-ranking.csv")
-    diagnostics = _read_rows(calibrated_output / "calibration-diagnostics.csv")
+    average_rows = read_csv(calibrated_output / "stadium-average-ranking.csv")
+    diagnostics = read_csv(calibrated_output / "calibration-diagnostics.csv")
     assert sum(float(row["prob_highest_average"]) for row in average_rows) == pytest.approx(
         1.0, abs=_ROUNDING_TOLERANCE * len(average_rows)
     )
@@ -134,45 +135,3 @@ def test_stadium_average_rows_use_effective_sample_size_for_mc_error() -> None:
 
     assert float(rows[0]["mc_error"]) == round((0.5 * 0.5 / sample_size) ** 0.5, 6)
     assert float(rows[0]["mc_error"]) > round((0.5 * 0.5 / 2) ** 0.5, 6)
-
-
-def _read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_score_params(processed_dir: Path) -> None:
-    matches = [row for row in _read_rows(processed_dir / "matches.csv") if row["is_group_stage"] == "true"]
-    rows = [
-        {
-            "match_id": row["match_id"],
-            "lambda_home": "1.4",
-            "lambda_away": "1.1",
-            "weighted_rmse": "0.1",
-            "max_abs_error": "0.05",
-            "low_confidence": "false",
-            "bridge_weight": "1.0",
-        }
-        for row in matches
-    ]
-    with (processed_dir / "match_score_params.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _write_score_config(processed_dir: Path) -> None:
-    rows = [
-        {
-            "max_goals": "10",
-            "total_dispersion_tilt": "0.000000",
-            "btts_correlation_tilt": "0.000000",
-            "weighted_rmse": "0.100000",
-            "max_abs_error": "0.050000",
-            "unique_market_shapes": "1",
-        }
-    ]
-    with (processed_dir / "score_model_config.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)

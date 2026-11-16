@@ -4,10 +4,7 @@
 
 ## Checks run
 
-- [ ] `uv run ruff check .`
-- [ ] `uv run ruff format --check .`
-- [ ] `uv run mypy`
-- [ ] `uv run python -m pytest`
+- [ ] `uv run python scripts/gate.py`
 
 ## Checks skipped
 

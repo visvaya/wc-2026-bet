@@ -20,9 +20,11 @@ reviews:
         Model rules live in docs/model-spec.md and the file contracts in docs/data-contracts.md. Prefer
         lean code: reuse existing helpers, no options or layers without a current caller. Prefix comments
         on problems the pull request did not cause with "Pre-existing:". Do not comment on what the CI job
-        `check` already enforces: ruff check, ruff format, mypy, pytest with the coverage threshold from
-        pyproject.toml, markdownlint-cli2 and the offline lychee link check on Markdown, the gitleaks
-        secret scan and the Conventional Commits title check; or on what the
+        `check` already enforces through scripts/gate.py: ruff check, ruff format, mypy strict on src,
+        tests and scripts, the import-linter contracts, vulture dead code, the em dash and emoji scan of
+        tracked files, pytest with the coverage threshold from pyproject.toml, jscpd duplication and
+        markdownlint-cli2; nor on what the job checks besides: the offline lychee link check on
+        Markdown, the gitleaks secret scan and the Conventional Commits title check; or on what the
         security job enforces: pip-audit on production dependencies (development findings only warn,
         so do flag those), zizmor, ShellCheck and actionlint; or on em dash and emoji, which the
         commit hooks reject.

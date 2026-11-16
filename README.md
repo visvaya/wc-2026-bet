@@ -65,10 +65,8 @@ Data contracts and the model specification are documented in [`docs/data-contrac
 
 ```bash
 uv sync --locked --extra dev
-uv run python -m pytest   # add --cov for the coverage gate that CI enforces
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy
+uv run python -m pytest          # the tests alone
+uv run python scripts/gate.py    # the whole gate CI runs (lint, types, tests with coverage, more)
 ```
 
 `uv lock` refreshes `uv.lock` after a dependency change; it only picks versions published at least seven days ago (`exclude-newer` in `pyproject.toml`).

@@ -1,11 +1,11 @@
-import csv
 from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw
 
-from synthetic_data import write_group_schedule
+from synthetic_data import odds_for, write_group_schedule, write_rows
 from wc2026bet import ocr
+from wc2026bet.csv_io import read_csv
 from wc2026bet.ocr import (
     BoundingBox,
     detect_odds_boxes,
@@ -178,8 +178,8 @@ def test_write_odds_ocr_outputs_generates_raw_review_and_crops(tmp_path: Path, s
         allow_schedule_order_fallback=True,
     )
 
-    raw_rows = _read_rows(raw_path)
-    review_rows = _read_rows(review_path)
+    raw_rows = read_csv(raw_path)
+    review_rows = read_csv(review_path)
     assert count == 4
     assert len(raw_rows) == 4
     assert len(review_rows) == 4
@@ -194,17 +194,17 @@ def test_promote_review_odds_writes_canonical_manual_odds(tmp_path: Path, synthe
     review_path = work_dir / "odds_review.csv"
     output_path = work_dir / "odds.csv"
     write_odds_template(synthetic_base_data, review_path)
-    rows = _read_rows(review_path)
+    rows = read_csv(review_path)
     for row in rows:
-        row["decimal_odds"] = _odds_for(row["market"], row["selection"])
+        row["decimal_odds"] = odds_for(row["market"], row["selection"])
         row["source_file"] = "manual-test"
         row["captured_at"] = "2026-06-09T12:00:00"
         row["ocr_confidence"] = "1.0"
-    _write_rows(review_path, rows)
+    write_rows(review_path, rows)
 
     count = promote_review_odds(review_path, synthetic_base_data, output_path)
 
-    output_rows = _read_rows(output_path)
+    output_rows = read_csv(output_path)
     assert count == 792
     assert len(output_rows) == 792
     assert set(output_rows[0]) == {
@@ -224,10 +224,10 @@ def test_promote_review_odds_rejects_incomplete_review(tmp_path: Path, synthetic
     review_path = work_dir / "odds_review.csv"
     output_path = work_dir / "odds.csv"
     write_odds_template(synthetic_base_data, review_path)
-    rows = _read_rows(review_path)[:10]
+    rows = read_csv(review_path)[:10]
     for row in rows:
         row["decimal_odds"] = "2.0"
-    _write_rows(review_path, rows)
+    write_rows(review_path, rows)
 
     with pytest.raises(ValueError, match="Missing odds rows"):
         promote_review_odds(review_path, synthetic_base_data, output_path)
@@ -238,15 +238,15 @@ def test_promote_review_odds_rejects_unresolved_review_status(tmp_path: Path, sy
     review_path = work_dir / "odds_review.csv"
     output_path = work_dir / "odds.csv"
     write_odds_template(synthetic_base_data, review_path)
-    rows = _read_rows(review_path)
+    rows = read_csv(review_path)
     for row in rows:
-        row["decimal_odds"] = _odds_for(row["market"], row["selection"])
+        row["decimal_odds"] = odds_for(row["market"], row["selection"])
         row["source_file"] = "manual-test"
         row["captured_at"] = "2026-06-09T12:00:00"
         row["ocr_confidence"] = "1.0"
         row["status"] = "ok"
     rows[0]["status"] = "needs_review"
-    _write_rows(review_path, rows)
+    write_rows(review_path, rows)
 
     with pytest.raises(ValueError, match="Unresolved OCR review rows"):
         promote_review_odds(review_path, synthetic_base_data, output_path)
@@ -261,27 +261,3 @@ def _write_synthetic_market_image(path: Path, rows: int, selections: int) -> Non
             top = 30 + row * 60
             draw.rectangle((left, top, left + 65, top + 28), fill=(236, 238, 240))
     image.save(path)
-
-
-def _odds_for(market: str, selection: str) -> str:
-    if market == "1X2":
-        return {"home": "2.10", "draw": "3.40", "away": "3.90"}[selection]
-    if market == "btts":
-        return {"yes": "1.95", "no": "1.95"}[selection]
-    return {
-        "over_under_0_5": {"over": "1.07", "under": "8.80"},
-        "over_under_1_5": {"over": "1.38", "under": "3.05"},
-        "over_under_2_5": {"over": "2.15", "under": "1.72"},
-    }[market][selection]
-
-
-def _read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_rows(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)

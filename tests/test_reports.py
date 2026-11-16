@@ -1,6 +1,7 @@
-import csv
 from pathlib import Path
 
+from synthetic_data import write_rows
+from wc2026bet.csv_io import read_csv
 from wc2026bet.reports import build_group_stage_reports
 
 
@@ -9,7 +10,7 @@ def test_build_group_stage_reports_writes_expected_aggregates(tmp_path: Path) ->
     processed_dir = work_dir / "processed"
     output_dir = work_dir / "outputs"
     processed_dir.mkdir()
-    _write_csv(
+    write_rows(
         processed_dir / "matches.csv",
         [
             {
@@ -26,7 +27,7 @@ def test_build_group_stage_reports_writes_expected_aggregates(tmp_path: Path) ->
             }
         ],
     )
-    _write_csv(
+    write_rows(
         processed_dir / "match_score_params.csv",
         [
             {
@@ -40,7 +41,7 @@ def test_build_group_stage_reports_writes_expected_aggregates(tmp_path: Path) ->
             }
         ],
     )
-    _write_csv(
+    write_rows(
         processed_dir / "score_model_config.csv",
         [
             {
@@ -61,22 +62,10 @@ def test_build_group_stage_reports_writes_expected_aggregates(tmp_path: Path) ->
         "team_group": 2,
         "stadium_group": 1,
     }
-    group_rows = _read_rows(output_dir / "group-goals.csv")
-    team_rows = _read_rows(output_dir / "team-group.csv")
-    stadium_rows = _read_rows(output_dir / "stadium-group-ranking.csv")
+    group_rows = read_csv(output_dir / "group-goals.csv")
+    team_rows = read_csv(output_dir / "team-group.csv")
+    stadium_rows = read_csv(output_dir / "stadium-group-ranking.csv")
     assert group_rows[0]["expected_goals"] == "2.500000"
     assert {row["team"] for row in team_rows} == {"Mexico", "South Africa"}
     assert all(row["expected_points"] for row in team_rows)
     assert stadium_rows[0]["expected_average_goals"] == "2.500000"
-
-
-def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))

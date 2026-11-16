@@ -1,0 +1,8 @@
+{
+  "minLines": 12,
+  "minTokens": 60,
+  "threshold": 0,
+  "gitignore": true,
+  "format": ["python"],
+  "reporters": ["console"]
+}
