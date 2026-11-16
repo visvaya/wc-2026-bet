@@ -189,7 +189,11 @@ def scan(root: Path | None = None) -> list[str]:
     for path in git(["ls-files", "-z"], root).split("\0"):
         if not path or path == SCAN_SKIPPED:
             continue
-        data = ((root or Path()) / path).read_bytes()
+        try:
+            data = ((root or Path()) / path).read_bytes()
+        except FileNotFoundError:
+            continue  # deleted in the working tree but not staged yet: nothing left to publish
+
         if b"\0" in data:
             continue  # binary, as git decides it
         for number, line in enumerate(data.decode("utf-8", errors="replace").splitlines(), start=1):

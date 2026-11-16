@@ -172,6 +172,16 @@ def test_scan_reports_forbidden_characters_in_tracked_text_files(tmp_path: Path)
     ]
 
 
+def test_scan_skips_a_tracked_file_deleted_before_staging(tmp_path: Path) -> None:
+    hooks.git(["init", "-q"], tmp_path)
+    (tmp_path / "gone.md").write_text("clean\n", encoding="utf-8")
+    (tmp_path / "bad.md").write_text(f"a {EM_DASH} b\n", encoding="utf-8")
+    hooks.git(["add", "gone.md", "bad.md"], tmp_path)
+    (tmp_path / "gone.md").unlink()
+
+    assert hooks.scan(tmp_path) == ["bad.md:1: em dash (U+2014); use an en dash (U+2013) or a middle dot (U+00B7)"]
+
+
 def _repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, user: str, email: str) -> None:
     hooks.git(["init", "-q"], tmp_path)
     hooks.git(["config", "user.name", user], tmp_path)
