@@ -321,19 +321,8 @@ def run_sensitivity_command(
     print(f"- seed: {seed}")
     for name, count in counts.items():
         print(f"- {name}: {count}")
-    main_output = out.parent if out.name == "sensitivity" else None
-    if main_output is not None and (main_output / "stadium-average-ranking.csv").exists():
-        build_decision_report(
-            processed,
-            main_output,
-            main_output / "tournament-summary.md",
-            simulations=200_000,
-            seed=20260610,
-            extra_time_goal_multiplier=0.30,
-            penalty_model="coin_flip",
-            value_threshold=value_threshold,
-        )
-        print(f"- refreshed decision report: {main_output / 'tournament-summary.md'}")
+    # The decision report states the settings of the tournament run, which this command does not know.
+    print("- to include these results in the decision report, run build-decision-report with the tournament settings")
     return 0
 
 
