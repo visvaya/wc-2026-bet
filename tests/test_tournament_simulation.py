@@ -13,6 +13,7 @@ from wc2026bet.tournament_simulation import simulate_tournament
 _ROUNDING_TOLERANCE = 5e-7
 
 
+@pytest.mark.slow
 def test_simulate_tournament_writes_stadium_and_team_reports(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:
@@ -65,6 +66,7 @@ def test_simulate_tournament_writes_stadium_and_team_reports(
     assert (output_dir / "tournament-summary.md").exists()
 
 
+@pytest.mark.slow
 def test_simulate_tournament_is_seed_reproducible(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:
@@ -85,6 +87,7 @@ def test_simulate_tournament_is_seed_reproducible(
     ).read_text(encoding="utf-8")
 
 
+@pytest.mark.slow
 def test_simulate_tournament_supports_opta_reweighting(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:

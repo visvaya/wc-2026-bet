@@ -1,11 +1,14 @@
 import csv
 from pathlib import Path
 
+import pytest
+
 from wc2026bet.bridge import load_rating_goal_bridge, train_rating_goal_bridge
 from wc2026bet.csv_io import read_csv
 from wc2026bet.processed import build_processed_data
 
 
+@pytest.mark.slow
 def test_train_rating_goal_bridge_writes_model_files(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:
@@ -29,6 +32,7 @@ def test_train_rating_goal_bridge_writes_model_files(
     assert 0.15 <= away_lambda <= 5.5
 
 
+@pytest.mark.slow
 def test_rating_goal_bridge_downweights_low_confidence_rows(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:

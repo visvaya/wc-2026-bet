@@ -39,6 +39,7 @@ def written_mapping(tmp_path_factory: pytest.TempPathFactory, pdf: Path) -> tupl
     return count, output, raw_output
 
 
+@pytest.mark.slow
 def test_write_r32_mapping_extracts_synthetic_pdf_tables(tmp_path: Path) -> None:
     expected = r32_mapping_rows()
     pdf_path = tmp_path / "annex.pdf"

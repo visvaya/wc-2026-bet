@@ -27,6 +27,7 @@ testpaths = ["tests"]
 addopts = ["-p", "no:cacheprovider"]
 markers = [
     "real_data: needs the real snapshots; runs only when WC2026BET_DATA_DIR names a directory with base-data/ and data/manual/",
+    "slow: takes about a second or more (simulations, PDF extraction, OCR, git subprocesses); deselect with -m 'not slow'",
 ]
 
 [tool.coverage.run]
@@ -36,8 +37,9 @@ source = ["src/wc2026bet"]
 [tool.coverage.report]
 # A ratchet: it only goes up. Calibrated on the CI runner (ubuntu, Python 3.13), not locally, because
 # Windows measures about one point higher: on 2026-11-16 CI measured 84.09% on main (2697 statements,
-# 429 missed) while Windows measured 85.06% on the same commit.
-fail_under = 84
+# 429 missed) while Windows measured 85.06% on the same commit. The CLI command tests raised the
+# Windows measurement to 91.43% (231 missed), so the threshold is 90 until CI shows its number.
+fail_under = 90
 show_missing = true
 skip_covered = true
 

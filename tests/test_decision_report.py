@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from synthetic_data import write_rows, write_score_config, write_score_params
 from wc2026bet.bridge import train_rating_goal_bridge
 from wc2026bet.decision_report import build_decision_report
@@ -7,6 +9,7 @@ from wc2026bet.processed import build_processed_data
 from wc2026bet.tournament_simulation import simulate_tournament
 
 
+@pytest.mark.slow
 def test_build_decision_report_includes_value_verdict_and_diagnostics(
     tmp_path: Path, synthetic_base_data: Path, synthetic_manual_data: Path
 ) -> None:

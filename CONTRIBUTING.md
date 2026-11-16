@@ -28,6 +28,8 @@ It runs `ruff check`, `ruff format --check`, `mypy` (strict, on `src`, `tests` a
 
 CI also checks the relative links and anchors in the Markdown files with [lychee](https://github.com/lycheeverse/lychee) (`lychee --offline --include-fragments`); run it locally if you have it installed.
 
+While working, `uv run python -m pytest -m "not slow"` skips the tests marked `slow` (simulations, PDF extraction, OCR, git subprocesses) and runs in a fraction of the time; the gate always runs them all.
+
 Tests write only to `tmp_path` (the suite points it at `.test-artifacts/pytest`) and read data through paths computed from the repository root. The default suite uses generated synthetic data; tests marked `real_data` need the source snapshots and run only when `WC2026BET_DATA_DIR` is set (see the README).
 
 New model behaviour comes with a test written first. The model specification and the data contracts are in [`docs/model-spec.md`](docs/model-spec.md) and [`docs/data-contracts.md`](docs/data-contracts.md).
