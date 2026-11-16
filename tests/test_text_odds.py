@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from synthetic_data import write_group_schedule, write_match_result_text
+from synthetic_data import write_group_schedule, write_match_result_text, write_rows
 from wc2026bet.constants import TEAM_RATING_ALIASES
+from wc2026bet.csv_io import read_csv
 from wc2026bet.parsers import parse_base_matches
 from wc2026bet.text_odds import (
     parse_text_odds_file,
@@ -40,7 +41,7 @@ def test_write_text_odds_review_writes_synthetic_review_rows(tmp_path: Path, syn
 
     count = write_text_odds_review(source, synthetic_base_data, "1X2", output)
 
-    rows = _read_rows(output)
+    rows = read_csv(output)
     assert count == len(rows) == 216
     assert rows[0]["source_team_home"] == "Team A2"
     assert rows[0]["team_home"] == "Team A1"
@@ -227,8 +228,8 @@ def test_promote_text_odds_writes_final_odds_and_audit(tmp_path: Path, synthetic
 
     count = promote_text_odds(manual_dir, synthetic_base_data, output, audit, expected_matches=1)
 
-    output_rows = _read_rows(output)
-    audit_rows = _read_rows(audit)
+    output_rows = read_csv(output)
+    audit_rows = read_csv(audit)
     assert count == 11
     assert len(output_rows) == 11
     assert set(output_rows[0]) == {
@@ -376,16 +377,4 @@ def _write_text_review(
                 "reversed_order": "false",
             }
         )
-    _write_rows(path, rows)
-
-
-def _read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
-
-
-def _write_rows(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    write_rows(path, rows)

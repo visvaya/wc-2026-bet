@@ -1,13 +1,9 @@
-import csv
 from pathlib import Path
 
+from synthetic_data import odds_for, write_rows
+from wc2026bet.csv_io import read_csv
 from wc2026bet.parsers import parse_base_matches
 from wc2026bet.processed import build_processed_data, write_odds_template
-
-
-def read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
 
 
 def test_build_processed_data_writes_canonical_source_csvs(tmp_path: Path, base_data: Path) -> None:
@@ -105,10 +101,10 @@ def test_build_processed_data_copies_valid_manual_odds(tmp_path: Path, synthetic
 
     rows = read_csv(template_path)
     for row in rows:
-        row["decimal_odds"] = _odds_for(row["market"], row["selection"])
+        row["decimal_odds"] = odds_for(row["market"], row["selection"])
         row["source_file"] = "manual-test"
         row["captured_at"] = "2026-06-09T12:00:00"
-    _write_rows(template_path, rows)
+    write_rows(template_path, rows)
 
     result = build_processed_data(synthetic_base_data, processed_dir, manual_dir)
 
@@ -116,22 +112,3 @@ def test_build_processed_data_copies_valid_manual_odds(tmp_path: Path, synthetic
     assert result["odds"] == 792
     assert len(odds) == 792
     assert {row["manual_override"] for row in odds} == {"true"}
-
-
-def _odds_for(market: str, selection: str) -> str:
-    if market == "1X2":
-        return {"home": "2.10", "draw": "3.40", "away": "3.90"}[selection]
-    if market == "btts":
-        return {"yes": "1.95", "no": "1.95"}[selection]
-    return {
-        "over_under_0_5": {"over": "1.07", "under": "8.80"},
-        "over_under_1_5": {"over": "1.38", "under": "3.05"},
-        "over_under_2_5": {"over": "2.15", "under": "1.72"},
-    }[market][selection]
-
-
-def _write_rows(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
