@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from wc2026bet.csv_io import read_csv
@@ -89,8 +89,17 @@ def build_decision_report(
         ]
     )
     lines.extend(
-        "| {stadium_fifa} | {prob_highest_average} | {mc_error} | {fair_odds} | {bookmaker_odds} | {ev} | {p50} | {p05} | {p95} |".format(
-            **row
+        _table_row(
+            row,
+            "stadium_fifa",
+            "prob_highest_average",
+            "mc_error",
+            "fair_odds",
+            "bookmaker_odds",
+            "ev",
+            "p50",
+            "p05",
+            "p95",
         )
         for row in average_rows[:8]
     )
@@ -159,7 +168,8 @@ def _warning_lines(
     warnings = []
     if _low_confidence_count(match_params):
         warnings.append(
-            f"- warning: {_low_confidence_count(match_params)} low-confidence score fits feed the bridge at reduced weight"
+            f"- warning: {_low_confidence_count(match_params)} low-confidence score fits feed the bridge"
+            " at reduced weight"
         )
     if float(score_config["max_abs_error"]) > 0.15:
         warnings.append("- warning: score-grid max_abs_error is elevated; inspect per-match fit before staking")
@@ -226,8 +236,16 @@ def _opta_standings_section(rows: list[dict[str, str]]) -> list[str]:
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     lines.extend(
-        "| {team} | {group} | {model_expected_points} | {opta_xpts} | {diff_xpts} | {model_prob_l32} | {opta_qual} | {diff_qual} |".format(
-            **row
+        _table_row(
+            row,
+            "team",
+            "group",
+            "model_expected_points",
+            "opta_xpts",
+            "diff_xpts",
+            "model_prob_l32",
+            "opta_qual",
+            "diff_qual",
         )
         for row in ranked
     )
@@ -251,8 +269,16 @@ def _sensitivity_section(rows: list[dict[str, str]]) -> list[str]:
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     lines.extend(
-        "| {stadium_fifa} | {baseline_probability} | {min_probability} | {max_probability} | {min_fair_odds} | {max_fair_odds} | {min_ev}..{max_ev} | {stable_top_candidate} |".format(
-            **row
+        _table_row(
+            {**row, "ev_range": f"{row['min_ev']}..{row['max_ev']}"},
+            "stadium_fifa",
+            "baseline_probability",
+            "min_probability",
+            "max_probability",
+            "min_fair_odds",
+            "max_fair_odds",
+            "ev_range",
+            "stable_top_candidate",
         )
         for row in ranked
     )
@@ -284,14 +310,23 @@ def _opta_calibrated_sensitivity_section(
         "## Opta-Calibrated Sensitivity",
         "",
         f"- {verdict}",
-        "- This scenario reweights tournament paths toward Opta advancement probabilities without changing goal lambdas.",
+        (
+            "- This scenario reweights tournament paths toward Opta advancement probabilities"
+            " without changing goal lambdas."
+        ),
         "",
         "| Stadium | Baseline P | Opta P | Delta P | Baseline EV | Opta EV |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     lines.extend(
-        "| {stadium_fifa} | {baseline_probability} | {opta_calibrated_probability} | {delta_probability} | {baseline_ev} | {opta_calibrated_ev} |".format(
-            **row
+        _table_row(
+            row,
+            "stadium_fifa",
+            "baseline_probability",
+            "opta_calibrated_probability",
+            "delta_probability",
+            "baseline_ev",
+            "opta_calibrated_ev",
         )
         for row in ranked
     )
@@ -330,3 +365,9 @@ def _float_or_none(value: str) -> float | None:
     if value == "":
         return None
     return float(value)
+
+
+def _table_row(row: Mapping[str, str], *columns: str) -> str:
+    """One Markdown table row holding the given columns of a CSV row."""
+
+    return "| " + " | ".join(row[column] for column in columns) + " |"
