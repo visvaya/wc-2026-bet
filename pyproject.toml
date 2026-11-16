@@ -59,7 +59,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "S"]
 [tool.mypy]
 python_version = "3.13"
 mypy_path = "src"
-files = ["src/wc2026bet", "scripts"]
+files = ["src/wc2026bet", "scripts", "tests"]
 strict = true
 warn_unused_ignores = true
 

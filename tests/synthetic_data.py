@@ -12,7 +12,7 @@ import itertools
 import random
 from pathlib import Path
 
-import pymupdf
+import fitz  # PyMuPDF; the src modules use the same untyped name
 
 from wc2026bet.constants import BOOKMAKER_STADIUM_ALIASES, FIFA_STADIUMS
 from wc2026bet.regulations import R32_MAPPING_FIELDS, SLOT_FIELDS
@@ -132,7 +132,7 @@ def write_annex_c_pdf(path: Path, rows: list[dict[str, str]]) -> None:
     """Write a text page, then the mapping rows as ruled tables (option column, then one column per slot)."""
 
     cell_width, row_height, left, top, rows_per_page = 50, 13, 40, 40, 55
-    doc = pymupdf.open()
+    doc = fitz.open()
     doc.new_page().insert_text((left, top), "Synthetic regulations without mapping rows")
     for start in range(0, len(rows), rows_per_page):
         table = [["Option", *(field.removeprefix("vs_") for field in SLOT_FIELDS)]]
